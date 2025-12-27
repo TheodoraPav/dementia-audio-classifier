@@ -6,6 +6,8 @@ A machine learning pipeline for detecting dementia from audio recordings.
 The project is organized into a modular pipeline:
 *   `src/feature_extraction.py`: Wrapper for `pyAudioAnalysis` to extract acoustic features (MFCCs, etc.).
 *   `src/preprocess.py`: Utilities for data cleaning, specifically removing highly correlated features.
+*   `models.py`: Repository for model architectures and classifier configurations.
+*   `train_model.py`: Module for model training, LOOCV execution, and metric reporting.
 *   `main.py`: The entry point script that orchestrates feature extraction and preprocessing.
 
 ## Installation

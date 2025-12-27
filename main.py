@@ -7,6 +7,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from src.feature_extraction import extract_features
 from src.preprocess import remove_correlated_features
+from src.train_model import train_and_evaluate
 
 def main():
     # 1. Configuration
@@ -63,6 +64,9 @@ def main():
             if not current_file: 
                 print("Skipping...")
                 continue
+
+        # Step B: Train
+        train_and_evaluate(current_file, RESULTS_DIR, scenario_name=exp_name)
 
 if __name__ == "__main__":
     main()
