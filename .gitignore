@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Data and Results
+data/
+outputs/
+*.xlsx
+*.csv
+# Ignore large dataset folders if they are inside the repo
+ADReSS-IS2020-train/

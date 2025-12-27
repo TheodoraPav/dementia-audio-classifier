@@ -1,0 +1,12 @@
+pandas
+numpy
+matplotlib
+scikit-learn
+xgboost
+openpyxl
+pydub
+scipy
+hmmlearn
+simplejson
+eyed3
+pyAudioAnalysis
