@@ -9,6 +9,7 @@ from src.feature_extraction import extract_features
 from src.preprocess import remove_correlated_features
 from src.feature_selection import select_common_features
 from src.train_model import train_and_evaluate
+from src.utils import generate_global_performance_charts
 
 def main():
     # 1. Configuration
@@ -16,7 +17,7 @@ def main():
     RAW_DATA_DIR = os.path.join(BASE_DIR, "ADReSS-IS2020-train", "train", "Full_wave_enhanced_audio")
     FEATURES_DIR = os.path.join(BASE_DIR, "data", "processed")
     RESULTS_DIR = os.path.join(BASE_DIR, "outputs")
-    
+
     if not os.path.exists(RESULTS_DIR):
         os.makedirs(RESULTS_DIR)
 
@@ -54,59 +55,85 @@ def main():
     # Simple configuration to control the pipeline
     EXPERIMENTS = [
         {
-            "name": "Baseline", 
-            "use_filter": False, 
+            "name": "Baseline",
+            "use_filter": False,
             "use_selection": False,
             "suffix": "original"
         },
         {
-            "name": "Filtered (Corr < 0.95)", 
-            "use_filter": True, 
+            "name": "Filtered (Corr < 0.95)",
+            "use_filter": True,
             "use_selection": False,
             "suffix": "corr95"
         },
         {
-            "name": "Common Features (Intersection)", 
-            "use_filter": False, 
+            "name": "Common Features (Intersection)",
+            "use_filter": False,
             "use_selection": True,
             "suffix": "intersection"
         },
         {
-            "name": "Combined (Filter + Selection)", 
-            "use_filter": True, 
+            "name": "Combined (Filter + Selection)",
+            "use_filter": True,
             "use_selection": True,
             "suffix": "combined"
         }
     ]
 
+    all_metrics = []
 
     # 4. Run Experiments Loop
     for exp in EXPERIMENTS:
         exp_name = exp["name"]
         print(f"\n--- Running Experiment: {exp_name} ---")
-        
+
         current_file = base_features_file
-        
+
         # Step A: Correlation Filter
         if exp["use_filter"]:
             output_path = os.path.join(FEATURES_DIR, f"features_{exp['suffix']}_filtered.xlsx")
             print("  -> Applying Correlation Filter...")
             current_file = remove_correlated_features(current_file, output_path, threshold=0.95)
-            if not current_file: 
+            if not current_file:
                 print("Skipping...")
                 continue
-        
+
         # Step B: Feature Selection (Intersection)
         if exp["use_selection"]:
             output_path = os.path.join(FEATURES_DIR, f"features_{exp['suffix']}_selected.xlsx")
             print("  -> Applying Feature Selection (Intersection)...")
             current_file = select_common_features(current_file, output_path, top_n=20)
-            if not current_file: 
+            if not current_file:
                 print("Skipping...")
                 continue
 
         # Step C: Train
-        train_and_evaluate(current_file, RESULTS_DIR, scenario_name=exp_name)
+        metrics = train_and_evaluate(current_file, RESULTS_DIR, scenario_name=exp_name)
+        all_metrics.extend(metrics)
+
+    # 5. Consolidate Results
+    print("\n========================================")
+    print("Consolidated Results")
+    print("========================================")
+
+    if all_metrics:
+        final_df = pd.DataFrame(all_metrics)
+        # Reorder columns
+        cols = ['Scenario', 'Model'] + [c for c in final_df.columns if c not in ['Scenario', 'Model']]
+        final_df = final_df[cols]
+
+        output_file = os.path.join(RESULTS_DIR, "final_consolidated_report.xlsx")
+        final_df.to_excel(output_file, index=False)
+
+        print(final_df.to_string(index=False))
+        print(f"\nFull report saved to: {output_file}")
+
+        logical_order = ['Baseline', 'Filtered (Corr < 0.95)', 'Common Features (Intersection)', 'Combined (Filter + Selection)']
+        final_df['Scenario'] = pd.Categorical(final_df['Scenario'], categories=logical_order, ordered=True)
+        final_df = final_df.sort_values('Scenario')
+        generate_global_performance_charts(final_df, RESULTS_DIR)
+    else:
+        print("No metrics collected.")
 
 if __name__ == "__main__":
     main()

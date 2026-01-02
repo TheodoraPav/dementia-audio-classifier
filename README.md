@@ -9,6 +9,7 @@ The project is organized into a modular pipeline:
 *   `src/feature_selection.py`: Identifies features using the intersection of multiple models (RF, XGB, SVM).
 *   `src/models.py`: Repository for model architectures and classifier configurations.
 *   `src/train_model.py`: Module for model training, LOOCV execution, and metric reporting.
+*   `src/utils.py`: Helper functions for calculating performance metrics and generating plots.
 *   `main.py`: The entry point script that orchestrates the full pipeline.
 
 ## Installation
@@ -21,6 +22,12 @@ The project is organized into a modular pipeline:
     git clone https://github.com/tyiannak/pyAudioAnalysis.git
     pip install -e pyAudioAnalysis
     ```
+
+### Compatibility Warning 
+* Python Version: Python 3.10 or 3.11
+
+*Technical Requirement*: This project depends on `pyAudioAnalysis`, which requires the aifc module. 
+As of Python 3.13, aifc was removed from the standard library. To avoid installation errors, please ensure you are using Python 3.10 or 3.11.
 
 ## Usage
 Run the pipeline to extract features, select attributes, and classify:
