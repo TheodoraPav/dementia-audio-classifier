@@ -4,6 +4,8 @@ A machine learning pipeline for detecting dementia from audio recordings.
 
 ## Project Structure
 The project is organized into a modular pipeline:
+*   `src/audio_processing.py`: Implements K-Means clustering for speaker diarization.
+*   `src/preprocess_segments.py`: Handles audio segmentation based on diarization results.
 *   `src/feature_extraction.py`: Wrapper for `pyAudioAnalysis` to extract acoustic features (MFCCs, etc.).
 *   `src/preprocess.py`: Utilities for data cleaning, specifically removing highly correlated features.
 *   `src/feature_selection.py`: Identifies features using the intersection of multiple models (RF, XGB, SVM).
@@ -39,6 +41,8 @@ python main.py
 *   **Original Features**: `data/processed/features_dataset.xlsx`
 *   **Filtered Features**: `data/processed/features_corr95_filtered.xlsx`
 *   **Selected Features**: `data/processed/features_intersection_selected.xlsx`
+*   **Segmented Features**: `data/processed/features_segmented.xlsx` (From Pipeline A)
+*   **Consolidated Report**: `outputs/final_consolidated_report.xlsx` (Comparison of Segmented vs Baseline)
 
 ## Roadmap
 *   [ ] Feature Selection (Intersection of top features from RF/XGB/SVM)

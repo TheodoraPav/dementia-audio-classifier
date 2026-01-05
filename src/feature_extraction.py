@@ -2,7 +2,7 @@ import os
 import pandas as pd
 from pyAudioAnalysis import MidTermFeatures
 
-def extract_features(data_dir, output_dir):
+def extract_features(data_dir, output_dir, output_filename="features_dataset.xlsx"):
     """
     Extracts mid-term features from audio files in the data directory.
     Assumes 'cc' (healthy) and 'cd' (dementia) subdirectories exist.
@@ -53,9 +53,9 @@ def extract_features(data_dir, output_dir):
                 df['label'] = label
                 df['file_name'] = [os.path.basename(f) for f in wav_file_list]
                 data_frames.append(df)
-                print(f"  -> Extracted {len(wav_file_list)} samples.")
+                print(f"Extracted {len(wav_file_list)} samples.")
         except Exception as e:
-            print(f"  -> Error processing {class_name}: {e}")
+            print(f"Error processing {class_name}: {e}")
 
     if len(data_frames) > 0:
         final_df = pd.concat(data_frames, ignore_index=True)
@@ -67,7 +67,7 @@ def extract_features(data_dir, output_dir):
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
-        output_file = os.path.join(output_dir, "features_dataset.xlsx")
+        output_file = os.path.join(output_dir, output_filename)
         final_df.to_excel(output_file, index=False)
         print(f"Success! Features saved to {output_file}")
         return output_file

@@ -9,12 +9,14 @@ from src.feature_extraction import extract_features
 from src.preprocess import remove_correlated_features
 from src.feature_selection import select_common_features
 from src.train_model import train_and_evaluate
+from src.preprocess_segments import preprocess_dataset
 from src.utils import generate_global_performance_charts
 
 def main():
     # 1. Configuration
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     RAW_DATA_DIR = os.path.join(BASE_DIR, "ADReSS-IS2020-train", "train", "Full_wave_enhanced_audio")
+    SEGMENTED_DATA_DIR = os.path.join(BASE_DIR, "data", "segmented_audio")
     FEATURES_DIR = os.path.join(BASE_DIR, "data", "processed")
     RESULTS_DIR = os.path.join(BASE_DIR, "outputs")
 
@@ -24,6 +26,25 @@ def main():
     print("========================================")
     print("   Medical Audio Classification Pipeline")
     print("========================================")
+
+    # [Step 0] Check for Segmented Data
+    print(f"\n[Step 0] Checking for Segmented Data")
+    run_preprocessing = False
+
+    if not os.path.exists(SEGMENTED_DATA_DIR) or not os.listdir(SEGMENTED_DATA_DIR):
+        run_preprocessing = True
+    else:
+        print(f"Segmented data found at: {SEGMENTED_DATA_DIR}")
+        user_input = input("Do you want to overwrite existing segments? (y/n): ").strip().lower()
+        
+        if user_input in ['y', 'yes']:
+            print("Overwrite selected.")
+            run_preprocessing = True
+        else:
+            print("Skipping preprocessing. Using existing data.")
+
+    if run_preprocessing:
+        preprocess_dataset(RAW_DATA_DIR, SEGMENTED_DATA_DIR, 5.0)
 
     # 2. Extract Features (Base)
     print(f"\n[Step 1] Ensuring Features Exist...")
@@ -82,12 +103,71 @@ def main():
 
     all_metrics = []
 
+    # ==========================================
+    # PIPELINE A: Segmented + GroupKFold
+    # ==========================================
+    print("\n" + "="*50)
+    print("PIPELINE A: Segmented Audio + GroupKFold")
+    print("="*50)
+    
+    feats_segmented = os.path.join(FEATURES_DIR, "features_segmented.xlsx")
+    
+    # Extract Features A
+    if not os.path.exists(feats_segmented):
+         extract_features(SEGMENTED_DATA_DIR, FEATURES_DIR, "features_segmented.xlsx")
+    else:
+         print(f"Features already exist at {feats_segmented}")
+         # Ask user if they want to recreate
+         user_input = input("Do you want to overwrite and re-extract segmented features? (y/n): ").strip().lower()
+         if user_input in ['y', 'yes']:
+             print("Re-extracting features...")
+             extract_features(SEGMENTED_DATA_DIR, FEATURES_DIR, "features_segmented.xlsx")
+         else:
+             print("Using existing segmented features.")
+    
+    for exp in EXPERIMENTS:
+        current_file = feats_segmented
+        suffix = exp["suffix"]
+        
+        # Apply Filters/Selection
+        if exp["use_filter"]:
+            out = os.path.join(FEATURES_DIR, f"features_segmented_{suffix}.xlsx")
+            if not os.path.exists(out):
+                 current_file = remove_correlated_features(current_file, out, threshold=0.95)
+            else:
+                 current_file = out
+                 
+        if exp["use_selection"]:
+             out_sel = os.path.join(FEATURES_DIR, f"features_segmented_{exp['suffix']}_ready.xlsx")
+             current_file = select_common_features(current_file, out_sel, top_n=20)
+        
+        if not current_file: continue
+        
+        # RUN TRAINING A (Default is GroupKFold in train_model.py)
+        metrics = train_and_evaluate(
+            current_file, 
+            RESULTS_DIR, 
+            scenario_name=f"Prop_{exp['name']}", 
+            validation_method="group_kfold"
+        )
+        all_metrics.extend(metrics)
+
+    # ==========================================
+    # PIPELINE B: Baseline (Raw Audio + LOOCV)
+    # ==========================================
+    print("\n" + "="*50)
+    print("PIPELINE B: Raw Audio + LOOCV")
+    print("="*50)
+
+    # We use the raw-extracted features here
+    current_base = base_features_file # This was extracted in 'Step 1' block above
+
     # 4. Run Experiments Loop
     for exp in EXPERIMENTS:
         exp_name = exp["name"]
         print(f"\n--- Running Experiment: {exp_name} ---")
 
-        current_file = base_features_file
+        current_file = current_base
 
         # Step A: Correlation Filter
         if exp["use_filter"]:
@@ -108,7 +188,12 @@ def main():
                 continue
 
         # Step C: Train
-        metrics = train_and_evaluate(current_file, RESULTS_DIR, scenario_name=exp_name)
+        metrics = train_and_evaluate(
+            current_file, 
+            RESULTS_DIR, 
+            scenario_name=f"Base_{exp['name']}",
+            validation_method="loocv"
+        )
         all_metrics.extend(metrics)
 
     # 5. Consolidate Results
@@ -127,9 +212,8 @@ def main():
 
         print(final_df.to_string(index=False))
         print(f"\nFull report saved to: {output_file}")
-
-        logical_order = ['Baseline', 'Filtered (Corr < 0.95)', 'Common Features (Intersection)', 'Combined (Filter + Selection)']
-        final_df['Scenario'] = pd.Categorical(final_df['Scenario'], categories=logical_order, ordered=True)
+        
+        # Sort by Scenario name for better plotting
         final_df = final_df.sort_values('Scenario')
         generate_global_performance_charts(final_df, RESULTS_DIR)
     else:

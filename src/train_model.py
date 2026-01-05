@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 import time
-from sklearn.model_selection import LeaveOneOut, cross_val_predict
+from sklearn.model_selection import GroupKFold, LeaveOneOut, cross_val_predict
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 
@@ -11,12 +11,8 @@ from src.utils import evaluate_predictions, save_metrics_to_excel, plot_roc_comp
 # Import model definitions
 from src.models import get_models
 
-def train_and_evaluate(data_file, output_dir, scenario_name="Baseline"):
-    """
-    Trains models using LOOCV and saves results.
-    Returns: list of metric dictionaries.
-    """
-    print(f"\n--- Starting Model Training: {scenario_name} (LOOCV) ---")
+def train_and_evaluate(data_file, output_dir, scenario_name="Baseline", validation_method="group_kfold"):
+    print(f"\n--- Starting Training: {scenario_name} [{validation_method}] ---")
 
     # Load Data
     try:
@@ -33,10 +29,39 @@ def train_and_evaluate(data_file, output_dir, scenario_name="Baseline"):
     X = df.drop(columns=[target_col, 'file_name'], errors='ignore')
     y = df[target_col]
 
+
+    groups = None
+    cv = None
+
+    # Setup Validation Strategy
+    if validation_method == "group_kfold":
+        if 'file_name' not in df.columns:
+             print("Error: 'file_name' missing for GroupKFold.")
+             return []
+             
+        # Extract Groups (Subject IDs)
+        def extract_id(filename):
+            name = os.path.splitext(filename)[0]
+            parts = name.rsplit('_', 1) 
+            if len(parts) > 1: return parts[0]
+            return name
+
+        groups = df['file_name'].apply(extract_id).values
+        print(f"  -> Found {len(np.unique(groups))} unique subjects (Groups).")
+        cv = GroupKFold(n_splits=5)
+        
+    elif validation_method == "loocv":
+        print(f"  -> Using Leave-One-Out Cross-Validation on {len(df)} samples.")
+        cv = LeaveOneOut()
+        groups = None
+        
+    else:
+        print(f"Error: Unknown validation method {validation_method}")
+        return []
+
     # Define Models
     models = get_models()
-
-    cv = LeaveOneOut()
+    
     metrics_list = []
     roc_data_list = []
 
@@ -51,7 +76,7 @@ def train_and_evaluate(data_file, output_dir, scenario_name="Baseline"):
 
         try:
             # Cross-Validated Predictions
-            y_probs = cross_val_predict(pipeline, X, y, cv=cv, method='predict_proba')[:, 1]
+            y_probs = cross_val_predict(pipeline, X, y, groups=groups, cv=cv, method='predict_proba')[:, 1]
             y_pred = (y_probs >= 0.5).astype(int)
 
             end_time = time.time()
@@ -80,7 +105,7 @@ def train_and_evaluate(data_file, output_dir, scenario_name="Baseline"):
         os.makedirs(output_dir)
 
     # Generate unique filename safe for the scenario
-    safe_scenario = "".join([c if c.isalnum() else "_" for c in scenario_name])
+    safe_scenario = "".join([c if c.isalnum() else "_" for c in scenario_name]) + "_" + validation_method
 
     # Save Metrics Table
     save_metrics_to_excel(metrics_list, os.path.join(output_dir, f"results_{safe_scenario}.xlsx"))
