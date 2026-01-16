@@ -44,7 +44,22 @@ python main.py
 *   **Segmented Features**: `data/processed/features_segmented.xlsx` (From Pipeline A)
 *   **Consolidated Report**: `outputs/final_consolidated_report.xlsx` (Comparison of Segmented vs Baseline)
 
+## Key Features
+
+### 1. Advanced Audio Preprocessing
+The pipeline supports two methods for splitting patient audio:
+*   **Pyannote Diarization**: Uses speaker diarization to separate patient speech.
+*   **Transcript-Based**: Uses `.cha` transcription files for exact timestamp extraction.
+
+### 2. Features
+*   **Audio Features**: Extracts acoustic features using `pyAudioAnalysis`.
+*   **Text Features**: Extracts linguistic markers from transcriptions.
+
+### 3. Feature Selection
+*   **Remove Correlated Features**: Eliminates redundant features with high correlation (>95%).
+*   **Select Top Features**: Keeps only the most relevant features identified by multiple models (RF, XGB, SVM).
+
 ## Roadmap
-*   [ ] Feature Selection (Intersection of top features from RF/XGB/SVM)
-*   [ ] Advanced Audio Processing (Speaker Diarization)
-*   [ ] Model Training & Evaluation
+*   [x] Feature Selection (Intersection of top features from RF/XGB/SVM)
+*   [x] Advanced Audio Processing (Speaker Diarization)
+*   [x] Model Training & Evaluation

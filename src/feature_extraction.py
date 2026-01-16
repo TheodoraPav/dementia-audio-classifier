@@ -3,10 +3,6 @@ import pandas as pd
 from pyAudioAnalysis import MidTermFeatures
 
 def extract_features(data_dir, output_dir, output_filename="features_dataset.xlsx"):
-    """
-    Extracts mid-term features from audio files in the data directory.
-    Assumes 'cc' (healthy) and 'cd' (dementia) subdirectories exist.
-    """
     classes = {
         "healthy": {
             "path": os.path.join(data_dir, "cc"),

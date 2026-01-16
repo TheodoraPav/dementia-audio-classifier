@@ -10,11 +10,13 @@ from sklearn.pipeline import Pipeline
 from src.utils import evaluate_predictions, save_metrics_to_excel, plot_roc_comparison
 # Import model definitions
 from src.models import get_models
+from src.preprocess import get_uncorrelated_features
+from src.feature_selection import get_selected_features
 
-def train_and_evaluate(data_file, output_dir, scenario_name="Baseline", validation_method="group_kfold"):
-    print(f"\n--- Starting Training: {scenario_name} [{validation_method}] ---")
+def train_and_evaluate(data_file, output_dir, scenario_name="Baseline", validation_method="group_kfold", use_filter=False, use_selection=False):
+    print(f"\nStarting Training: {scenario_name} [{validation_method}]")
 
-    # Load Data
+    #1. Load Data
     try:
         df = pd.read_excel(data_file)
     except FileNotFoundError:
@@ -33,7 +35,7 @@ def train_and_evaluate(data_file, output_dir, scenario_name="Baseline", validati
     groups = None
     cv = None
 
-    # Setup Validation Strategy
+    #2. Setup Validation Strategy
     if validation_method == "group_kfold":
         if 'file_name' not in df.columns:
              print("Error: 'file_name' missing for GroupKFold.")
@@ -47,11 +49,9 @@ def train_and_evaluate(data_file, output_dir, scenario_name="Baseline", validati
             return name
 
         groups = df['file_name'].apply(extract_id).values
-        print(f"  -> Found {len(np.unique(groups))} unique subjects (Groups).")
         cv = GroupKFold(n_splits=5)
         
     elif validation_method == "loocv":
-        print(f"  -> Using Leave-One-Out Cross-Validation on {len(df)} samples.")
         cv = LeaveOneOut()
         groups = None
         
@@ -59,7 +59,7 @@ def train_and_evaluate(data_file, output_dir, scenario_name="Baseline", validati
         print(f"Error: Unknown validation method {validation_method}")
         return []
 
-    # Define Models
+    #3. Define Models
     models = get_models()
     
     metrics_list = []
@@ -67,38 +67,76 @@ def train_and_evaluate(data_file, output_dir, scenario_name="Baseline", validati
 
     for name, model in models.items():
         print(f"Evaluating {name}...")
-
+        
+        y_true_all = []
+        y_probs_all = []
         start_time = time.time()
-        pipeline = Pipeline([
-            ('scaler', StandardScaler()),
-            ('classifier', model)
-        ])
-
+        
         try:
-            # Cross-Validated Predictions
-            y_probs = cross_val_predict(pipeline, X, y, groups=groups, cv=cv, method='predict_proba')[:, 1]
-            y_pred = (y_probs >= 0.5).astype(int)
+            #4. Manual Cross-Validation Loop
+            for train_idx, val_idx in cv.split(X, y, groups=groups):
+                
+                #4.1 Split Data
+                X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
+                y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
+                
+                #4.2 Correlation Filter
+                if use_filter:
+                    keep_cols, _ = get_uncorrelated_features(X_train, threshold=0.95)
+                    X_train = X_train[keep_cols]
+                    X_val = X_val[keep_cols]
+                
+                #4.3 Feature Selection
+                if use_selection:
+                    selected_feats = get_selected_features(X_train, y_train, top_n=30)
+                    if not selected_feats:
+                         pass
+                    else:
+                        X_train = X_train[selected_feats]
+                        X_val = X_val[selected_feats]
 
+                #4.4 Pipeline (Scaler + Model)
+                pipeline = Pipeline([
+                    ('scaler', StandardScaler()),
+                    ('classifier', model)
+                ])
+                
+                #4.5 Train
+                pipeline.fit(X_train, y_train)
+                
+                #4.6 Predict
+                probs = pipeline.predict_proba(X_val)[:, 1]
+                
+                y_true_all.extend(y_val)
+                y_probs_all.extend(probs)
+            
+            #5. Aggregate Results
+            y_true_all = np.array(y_true_all)
+            y_probs_all = np.array(y_probs_all)
+            y_pred_all = (y_probs_all >= 0.5).astype(int)
+            
             end_time = time.time()
             elapsed_time = end_time - start_time
 
-            # Calculate Metrics using util
-            metrics = evaluate_predictions(y, y_pred, y_probs, model_name=name)
+            #6. Calculate Metrics using util
+            metrics = evaluate_predictions(y_true_all, y_pred_all, y_probs_all, model_name=name)
             metrics['Scenario'] = scenario_name
             metrics['Runtime (s)'] = round(elapsed_time, 4) # Add Runtime
 
             metrics_list.append(metrics)
 
-            # Store data for plotting
+            #7. Store data for plotting
             roc_data_list.append({
                 'name': name,
-                'y_true': y,
-                'y_probs': y_probs,
+                'y_true': y_true_all,
+                'y_probs': y_probs_all,
                 'auc': metrics.get('AUC', 0)
             })
 
         except Exception as e:
             print(f"Error evaluating {name}: {e}")
+            import traceback
+            traceback.print_exc()
 
     # Save Results
     if not os.path.exists(output_dir):

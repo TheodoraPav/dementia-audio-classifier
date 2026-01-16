@@ -6,11 +6,10 @@ import pandas as pd
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from src.feature_extraction import extract_features
-from src.preprocess import remove_correlated_features
-from src.feature_selection import select_common_features
 from src.train_model import train_and_evaluate
-from src.preprocess_segments import preprocess_dataset
+from src.preprocess_segments import preprocess_with_pyannote, preprocess_with_transcript
 from src.utils import generate_global_performance_charts
+from src.merge_txt_feature import extract_text_features_from_dir
 
 def main():
     # 1. Configuration
@@ -19,6 +18,7 @@ def main():
     SEGMENTED_DATA_DIR = os.path.join(BASE_DIR, "data", "segmented_audio")
     FEATURES_DIR = os.path.join(BASE_DIR, "data", "processed")
     RESULTS_DIR = os.path.join(BASE_DIR, "outputs")
+    TRANSCRIPTION_DIR = os.path.join(BASE_DIR, "ADReSS-IS2020-train", "train", "transcription")
 
     if not os.path.exists(RESULTS_DIR):
         os.makedirs(RESULTS_DIR)
@@ -27,8 +27,7 @@ def main():
     print("   Medical Audio Classification Pipeline")
     print("========================================")
 
-    # [Step 0] Check for Segmented Data
-    print(f"\n[Step 0] Checking for Segmented Data")
+    # 1. Check for Segmented Data
     run_preprocessing = False
 
     if not os.path.exists(SEGMENTED_DATA_DIR) or not os.listdir(SEGMENTED_DATA_DIR):
@@ -44,17 +43,27 @@ def main():
             print("Skipping preprocessing. Using existing data.")
 
     if run_preprocessing:
-        preprocess_dataset(RAW_DATA_DIR, SEGMENTED_DATA_DIR, 5.0)
+        print("Select Preprocessing Method:")
+        print("1. Pyannote (Speaker Diarization)")
+        print("2. Transcript-Based (Exact Timestamps)")
+        method = input("Enter method (1-2) [Default: 2]: ").strip()
+        
+        if method == '1':
+            preprocess_with_pyannote(RAW_DATA_DIR, SEGMENTED_DATA_DIR, 5.0)
+        else:
+            preprocess_with_transcript(RAW_DATA_DIR, SEGMENTED_DATA_DIR, TRANSCRIPTION_DIR, 5.0)
 
-    # 2. Extract Features (Base)
-    print(f"\n[Step 1] Ensuring Features Exist...")
+    # 2. Extract Features
     if not os.path.exists(RAW_DATA_DIR):
         print(f"Error: Raw data directory not found at: {RAW_DATA_DIR}")
         return
 
     features_file_path = os.path.join(FEATURES_DIR, "features_dataset.xlsx")
-    
-    # Check if features already exist
+
+    # Extract Text Features (Once)
+    print("Extracting Text Features...")
+    text_df = extract_text_features_from_dir(TRANSCRIPTION_DIR)
+
     should_extract = True
     if os.path.exists(features_file_path):
         print(f"Features file found at: {features_file_path}")
@@ -65,15 +74,34 @@ def main():
         else:
             print("Re-extracting features...")
     
+
     if should_extract:
+        # A. Audio Features
         base_features_file = extract_features(RAW_DATA_DIR, FEATURES_DIR)
         if not base_features_file:
             return
+
+        if not text_df.empty:
+            print("Merging Audio and Text Features")
+            # Load Audio Features
+            audio_df = pd.read_excel(base_features_file)
+            
+            audio_df['temp_id'] = audio_df['file_name'].apply(lambda x: os.path.splitext(x)[0])
+            
+            merged_df = pd.merge(audio_df, text_df, left_on='temp_id', right_on='file_name', how='left', suffixes=('', '_txt'))
+            
+            # Clean up keys
+            if 'file_name_txt' in merged_df.columns:
+                merged_df.drop(columns=['file_name_txt'], inplace=True)
+            merged_df.drop(columns=['temp_id'], inplace=True)
+            
+            # Save back
+            merged_df.to_excel(base_features_file, index=False)
+            print(f"Merged features saved to {base_features_file}")
     else:
         base_features_file = features_file_path
-    
-    # 3. Define Experiments
-    # Simple configuration to control the pipeline
+
+    # 3. Initialize Experiments
     EXPERIMENTS = [
         {
             "name": "Baseline",
@@ -112,43 +140,47 @@ def main():
     
     feats_segmented = os.path.join(FEATURES_DIR, "features_segmented.xlsx")
     
-    # Extract Features A
+    # A.1 Extract Segmented Features
     if not os.path.exists(feats_segmented):
          extract_features(SEGMENTED_DATA_DIR, FEATURES_DIR, "features_segmented.xlsx")
     else:
          print(f"Features already exist at {feats_segmented}")
-         # Ask user if they want to recreate
          user_input = input("Do you want to overwrite and re-extract segmented features? (y/n): ").strip().lower()
          if user_input in ['y', 'yes']:
              print("Re-extracting features...")
              extract_features(SEGMENTED_DATA_DIR, FEATURES_DIR, "features_segmented.xlsx")
          else:
              print("Using existing segmented features.")
+
+    # A.2 Merge Text Features into Segmented Features
+    if os.path.exists(feats_segmented):
+        print("Merging Text Features into Segmented Data...")
+        seg_df = pd.read_excel(feats_segmented)
+        
+        if 'filler_ratio' not in seg_df.columns:
+                seg_df['patient_id'] = seg_df['file_name'].astype(str).apply(lambda x: x.split('_')[0])
+                
+                merged_seg_df = pd.merge(seg_df, text_df, left_on='patient_id', right_on='file_name', how='left', suffixes=('', '_txt'))
+                
+                if 'file_name_txt' in merged_seg_df.columns:
+                    merged_seg_df.drop(columns=['file_name_txt'], inplace=True)
+                merged_seg_df.drop(columns=['patient_id'], inplace=True)
+                
+                merged_seg_df.to_excel(feats_segmented, index=False)
+                print(f"Merged segmented features saved to {feats_segmented}")
+        else:
+            print("Text features already present in segmented data.")
     
     for exp in EXPERIMENTS:
         current_file = feats_segmented
-        suffix = exp["suffix"]
-        
-        # Apply Filters/Selection
-        if exp["use_filter"]:
-            out = os.path.join(FEATURES_DIR, f"features_segmented_{suffix}.xlsx")
-            if not os.path.exists(out):
-                 current_file = remove_correlated_features(current_file, out, threshold=0.95)
-            else:
-                 current_file = out
-                 
-        if exp["use_selection"]:
-             out_sel = os.path.join(FEATURES_DIR, f"features_segmented_{exp['suffix']}_ready.xlsx")
-             current_file = select_common_features(current_file, out_sel, top_n=20)
-        
-        if not current_file: continue
-        
-        # RUN TRAINING A (Default is GroupKFold in train_model.py)
+        #A.3 Train and Evaluate
         metrics = train_and_evaluate(
             current_file, 
             RESULTS_DIR, 
             scenario_name=f"Prop_{exp['name']}", 
-            validation_method="group_kfold"
+            validation_method="group_kfold",
+            use_filter=exp["use_filter"],
+            use_selection=exp["use_selection"]
         )
         all_metrics.extend(metrics)
 
@@ -159,44 +191,22 @@ def main():
     print("PIPELINE B: Raw Audio + LOOCV")
     print("="*50)
 
-    # We use the raw-extracted features here
-    current_base = base_features_file # This was extracted in 'Step 1' block above
+    current_base = base_features_file
 
-    # 4. Run Experiments Loop
     for exp in EXPERIMENTS:
-        exp_name = exp["name"]
-        print(f"\n--- Running Experiment: {exp_name} ---")
-
         current_file = current_base
-
-        # Step A: Correlation Filter
-        if exp["use_filter"]:
-            output_path = os.path.join(FEATURES_DIR, f"features_{exp['suffix']}_filtered.xlsx")
-            print("  -> Applying Correlation Filter...")
-            current_file = remove_correlated_features(current_file, output_path, threshold=0.95)
-            if not current_file:
-                print("Skipping...")
-                continue
-
-        # Step B: Feature Selection (Intersection)
-        if exp["use_selection"]:
-            output_path = os.path.join(FEATURES_DIR, f"features_{exp['suffix']}_selected.xlsx")
-            print("  -> Applying Feature Selection (Intersection)...")
-            current_file = select_common_features(current_file, output_path, top_n=20)
-            if not current_file:
-                print("Skipping...")
-                continue
-
-        # Step C: Train
+        #B.1 Train and Evaluate
         metrics = train_and_evaluate(
             current_file, 
             RESULTS_DIR, 
             scenario_name=f"Base_{exp['name']}",
-            validation_method="loocv"
+            validation_method="loocv",
+            use_filter=exp["use_filter"],
+            use_selection=exp["use_selection"]
         )
         all_metrics.extend(metrics)
 
-    # 5. Consolidate Results
+    # 4. Consolidate Results
     print("\n========================================")
     print("Consolidated Results")
     print("========================================")

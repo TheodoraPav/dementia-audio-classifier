@@ -10,3 +10,4 @@ hmmlearn
 simplejson
 eyed3
 pyAudioAnalysis
+pyannote.audio
