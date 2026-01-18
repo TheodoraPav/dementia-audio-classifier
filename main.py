@@ -114,19 +114,19 @@ def main():
             "use_filter": True,
             "use_selection": False,
             "suffix": "corr95"
-        }#,
-        # {
-        #     "name": "Common Features (Intersection)",
-        #     "use_filter": False,
-        #     "use_selection": True,
-        #     "suffix": "intersection"
-        # },
-        # {
-        #     "name": "Combined (Filter + Selection)",
-        #     "use_filter": True,
-        #     "use_selection": True,
-        #     "suffix": "combined"
-        # }
+        },
+        {
+            "name": "Common Features (Intersection)",
+            "use_filter": False,
+            "use_selection": True,
+            "suffix": "intersection"
+        },
+        {
+            "name": "Combined (Filter + Selection)",
+            "use_filter": True,
+            "use_selection": True,
+            "suffix": "combined"
+        }
     ]
 
     all_metrics = []

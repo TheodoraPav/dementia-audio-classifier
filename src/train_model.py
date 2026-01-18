@@ -5,10 +5,7 @@ import time
 from sklearn.model_selection import GroupKFold, LeaveOneOut, cross_val_predict
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
-
-# Import metrics utility
 from src.utils import evaluate_predictions, save_metrics_to_excel, plot_roc_comparison, save_feature_importance
-# Import model definitions
 from src.models import get_models
 from src.preprocess import get_uncorrelated_features
 from src.feature_selection import get_selected_features
@@ -141,7 +138,7 @@ def train_and_evaluate(data_file, output_dir, scenario_name="Baseline", validati
             })
 
             if name == "SVM_Linear":
-                save_feature_importance(model, X_train.columns, output_image=scenario_name + '_final_svm_features.png', output_csv=scenario_name +'_final_svm_weights.csv')
+                save_feature_importance(model, X_train.columns, output_image=os.path.join(output_dir, scenario_name + '_final_svm_features.png'), output_csv=os.path.join(output_dir, scenario_name +'_final_svm_weights.csv'))
 
         except Exception as e:
             print(f"Error evaluating {name}: {e}")

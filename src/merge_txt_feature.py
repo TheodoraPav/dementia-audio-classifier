@@ -4,10 +4,6 @@ import re
 from sklearn.preprocessing import StandardScaler
 
 def parse_cha_file(file_path):
-    """
-        Parses a single .cha file to extract linguistic and fluency statistics
-        from the participant (PAR) speaker tiers.
-        """
     stats = {
         'word_count': 0,
         'fillers_count': 0,
@@ -15,7 +11,8 @@ def parse_cha_file(file_path):
         'errors_count': 0,
         'total_duration': 0,
         'pause_count': 0,
-        'repetition_count': 0
+        'repetition_count': 0,
+        'self_correction_count': 0
     }
     
     current_speaker = None
@@ -71,6 +68,10 @@ def parse_cha_file(file_path):
                     reps = re.findall(r'\[/\]', content)
                     stats['repetition_count'] += len(reps)
 
+                    # Count Self Corrections marked with [//]
+                    self_corrections = re.findall(r'\[//\]', content)
+                    stats['self_correction_count'] += len(self_corrections)
+
                     # Cleanup for Word Count
                     # Remove the markers we just counted
                     clean_text = re.sub(r'\[:\s.*?\]', '', content)
@@ -123,6 +124,7 @@ def extract_text_features_from_dir(transcription_dir):
                         'rep_ratio': stats['repetition_count'] / total_words,
                         'error_ratio': stats['errors_count'] / total_words,
                         'correction_ratio': stats['corrections_count'] / total_words,
+                        'self_correction_ratio': stats['self_correction_count'] / total_words,
                         'words_per_minute': (stats['word_count'] / (stats['total_duration'] / 60000.0)) if stats['total_duration'] > 0 else 0
 }
 
@@ -144,7 +146,7 @@ def extract_text_features_from_dir(transcription_dir):
     
     # Normalize the features
     scaler = StandardScaler()
-    feature_cols = ['filler_ratio', 'pause_ratio', 'rep_ratio', 'correction_ratio', 'error_ratio', 'words_per_minute']
+    feature_cols = ['filler_ratio', 'pause_ratio', 'rep_ratio', 'correction_ratio', 'error_ratio', 'self_correction_ratio', 'words_per_minute']
     df[feature_cols] = scaler.fit_transform(df[feature_cols])
     
     print(f"Extracted and normalized text features for {len(df)} transcripts.")

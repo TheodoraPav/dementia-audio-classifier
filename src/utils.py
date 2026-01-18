@@ -154,6 +154,5 @@ def save_feature_importance(model, feature_names, output_image='feature_importan
 
     plt.tight_layout()
     plt.savefig(output_image, dpi=300)
-    plt.show()
 
     print(f"Feature importance plot saved to: {output_image}")
