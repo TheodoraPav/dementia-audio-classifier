@@ -126,7 +126,7 @@ def preprocess_with_transcript(raw_data_dir, output_dir, transcription_dir, segm
     
     for cls in CLASSES:
         in_path = os.path.join(raw_data_dir, cls)
-        trans_pasth = os.path.join(transcription_dir, cls)
+        trans_path = os.path.join(transcription_dir, cls)
         out_path = os.path.join(output_dir, cls)
         
         if not os.path.exists(in_path): continue

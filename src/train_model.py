@@ -7,7 +7,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 
 # Import metrics utility
-from src.utils import evaluate_predictions, save_metrics_to_excel, plot_roc_comparison
+from src.utils import evaluate_predictions, save_metrics_to_excel, plot_roc_comparison, save_feature_importance
 # Import model definitions
 from src.models import get_models
 from src.preprocess import get_uncorrelated_features
@@ -27,6 +27,13 @@ def train_and_evaluate(data_file, output_dir, scenario_name="Baseline", validati
     if target_col not in df.columns:
         print("Error: 'label' column missing.")
         return []
+
+    remove_chroma = True
+
+    if remove_chroma:
+        df = df.drop(columns=[c for c in df.columns if 'chroma' in c.lower()])
+        print("Running without Chroma features...")
+
 
     X = df.drop(columns=[target_col, 'file_name'], errors='ignore')
     y = df[target_col]
@@ -132,6 +139,9 @@ def train_and_evaluate(data_file, output_dir, scenario_name="Baseline", validati
                 'y_probs': y_probs_all,
                 'auc': metrics.get('AUC', 0)
             })
+
+            if name == "SVM_Linear":
+                save_feature_importance(model, X_train.columns, output_image=scenario_name + '_final_svm_features.png', output_csv=scenario_name +'_final_svm_weights.csv')
 
         except Exception as e:
             print(f"Error evaluating {name}: {e}")

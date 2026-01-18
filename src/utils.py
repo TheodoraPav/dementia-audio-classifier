@@ -111,3 +111,49 @@ def generate_global_performance_charts(df, output_dir):
     plt.close()
 
     print(f"Visualizations generated in {output_dir}")
+
+def save_feature_importance(model, feature_names, output_image='feature_importance.png', output_csv='feature_weights.csv'):
+    # 1. Extract Coefficients
+    coefs = model.coef_[0]
+
+    # 2. Create a DataFrame
+    features_df = pd.DataFrame({
+        'Feature': feature_names,
+        'Weight': coefs
+    })
+
+    # Add absolute values to identify the most influential features regardless of direction
+    features_df['AbsWeight'] = features_df['Weight'].abs()
+
+    # Sort features from most impactful to least impactful
+    features_df = features_df.sort_values(by='AbsWeight', ascending=False)
+
+    # 3. Save numerical weights to a CSV file
+    features_df.to_csv(output_csv, index=False)
+    print(f"Numerical weights saved to: {output_csv}")
+
+    # 4. Prepare Visualization
+    top_df = features_df.head(20).sort_values(by='Weight')
+
+    plt.figure(figsize=(12, 10))
+
+    # Conditional Coloring:
+    # Red (#d63031) for positive weights (indicates Dementia-prone traits)
+    # Blue (#0984e3) for negative weights (indicates Healthy-control traits)
+    colors = ['#d63031' if x > 0 else '#0984e3' for x in top_df['Weight']]
+
+    bars = plt.barh(top_df['Feature'], top_df['Weight'], color=colors, alpha=0.8)
+
+    # Add a vertical line at zero to clearly separate positive and negative influences
+    plt.axvline(x=0, color='black', linestyle='-', linewidth=0.8)
+
+    # Labeling and Formatting
+    plt.xlabel('SVM Coefficient Weight (Magnitude & Direction)', fontsize=12)
+    plt.title('Top 20 Features Influencing Dementia Detection\n(Red: Dementia-prone | Blue: Healthy-prone)', fontsize=14, fontweight='bold')
+    plt.grid(axis='x', linestyle='--', alpha=0.5)
+
+    plt.tight_layout()
+    plt.savefig(output_image, dpi=300)
+    plt.show()
+
+    print(f"Feature importance plot saved to: {output_image}")

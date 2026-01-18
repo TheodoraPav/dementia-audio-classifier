@@ -4,13 +4,18 @@ import re
 from sklearn.preprocessing import StandardScaler
 
 def parse_cha_file(file_path):
-
+    """
+        Parses a single .cha file to extract linguistic and fluency statistics
+        from the participant (PAR) speaker tiers.
+        """
     stats = {
         'word_count': 0,
         'fillers_count': 0,
         'corrections_count': 0,
         'errors_count': 0,
-        'total_duration': 0
+        'total_duration': 0,
+        'pause_count': 0,
+        'repetition_count': 0
     }
     
     current_speaker = None
@@ -20,23 +25,21 @@ def parse_cha_file(file_path):
             for line in f:
                 line_stripped = line.strip()
                 
-                if line.startswith('*'):
-                    if line.startswith('*PAR:'):
-                        current_speaker = 'PAR'
-                        content = line[5:].strip() # Remove '*PAR:'
-                    else:
-                        current_speaker = 'OTHER'
-                        continue
-                elif line.startswith('%') or line.startswith('@'):
-                    current_speaker = None
+                if line.startswith('*PAR'):
+                    current_speaker = 'PAR'
+                    content = line[5:].strip() # Remove '*PAR:'
+
+                elif line.startswith(('*', '%', '@')):
+                    current_speaker = 'OTHER'
                     continue
                 elif current_speaker == 'PAR':
+                    # Handle multi-line speech: if line is a continuation of PAR
                     content = line_stripped
                 else:
                     continue
 
                 if current_speaker == 'PAR':
-                    # Extract timestamps like 0_2360
+                    # Extract timestamps like 0_2360 to calculate total speaking time
                     timestamps = re.findall(r'\x15(\d+)_(\d+)\x15', content)
                     for start, end in timestamps:
                         stats['total_duration'] += (int(end) - int(start))
@@ -60,6 +63,14 @@ def parse_cha_file(file_path):
                     errors = re.findall(r'\[\*\s.*?\]', content)
                     stats['errors_count'] += len(errors)
 
+                    # Count Pauses marked as (.) or (..) or (...)
+                    pauses = re.findall(r'\(\.+\)', content)
+                    stats['pause_count'] += len(pauses)
+
+                    # Count Repetitions marked with [/] (previous word repeated)
+                    reps = re.findall(r'\[/\]', content)
+                    stats['repetition_count'] += len(reps)
+
                     # Cleanup for Word Count
                     # Remove the markers we just counted
                     clean_text = re.sub(r'\[:\s.*?\]', '', content)
@@ -69,6 +80,7 @@ def parse_cha_file(file_path):
                     # Remove other CHA markers like [//], [/], (.), etc.
                     # Remove brackets with content inside
                     clean_text = re.sub(r'\[.*?\]', '', clean_text)
+                    clean_text = re.sub(r'\(\.+\)', '', clean_text)
                     # Remove special characters except spaces/alphanumerics
                     clean_text = re.sub(r'[^\w\s]', '', clean_text)
                     
@@ -103,13 +115,16 @@ def extract_text_features_from_dir(transcription_dir):
                 
                 if stats:
                     total_words = stats['word_count'] if stats['word_count'] > 0 else 1
-                    
+
                     row = {
-                        'file_name': patient_id, # Linking key
+                        'file_name': patient_id,
                         'filler_ratio': stats['fillers_count'] / total_words,
+                        'pause_ratio': stats['pause_count'] / total_words,
+                        'rep_ratio': stats['repetition_count'] / total_words,
+                        'error_ratio': stats['errors_count'] / total_words,
                         'correction_ratio': stats['corrections_count'] / total_words,
-                        'error_ratio': stats['errors_count'] / total_words
-                    }
+                        'words_per_minute': (stats['word_count'] / (stats['total_duration'] / 60000.0)) if stats['total_duration'] > 0 else 0
+}
 
                     # Calculate words per minute
                     # total_duration is in milliseconds
@@ -129,7 +144,7 @@ def extract_text_features_from_dir(transcription_dir):
     
     # Normalize the features
     scaler = StandardScaler()
-    feature_cols = ['filler_ratio', 'correction_ratio', 'error_ratio', 'words_per_minute']
+    feature_cols = ['filler_ratio', 'pause_ratio', 'rep_ratio', 'correction_ratio', 'error_ratio', 'words_per_minute']
     df[feature_cols] = scaler.fit_transform(df[feature_cols])
     
     print(f"Extracted and normalized text features for {len(df)} transcripts.")
