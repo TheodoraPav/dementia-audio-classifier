@@ -15,7 +15,8 @@ def evaluate_predictions(y_true, y_pred, y_probs=None, model_name="Model"):
         "Accuracy": accuracy_score(y_true, y_pred),
         "Precision": precision_score(y_true, y_pred, zero_division=0),
         "Recall": recall_score(y_true, y_pred, zero_division=0),
-        "F1": f1_score(y_true, y_pred, zero_division=0)
+        "F1": f1_score(y_true, y_pred, zero_division=0),
+        "Classification Error": 1 - accuracy_score(y_true, y_pred)
     }
 
     if y_probs is not None:
@@ -73,94 +74,149 @@ def save_metrics_to_excel(metrics_list, output_file):
 
 def generate_global_performance_charts(df, output_dir):
     """
-    Produces a 2x2 Faceted Heatmap for Acc, F1, Precision, Recall
-    and a standalone AUC Heatmap.
+    Produces Grouped Bar Charts for Acc, F1, Precision, Recall, Classification Error
+    comparing Segmented vs. Raw audio,
+    and a standalone AUC Bar Chart.
     """
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    # --- PART 1: THE 4-METRIC DASHBOARD ---
-    metrics = ['Accuracy', 'F1', 'Precision', 'Recall']
-    palettes = ['YlGnBu', 'YlOrRd', 'BuPu', 'GnBu']
+    plot_df = df.copy()
+    
+    def parse_scenario(s):
+        # 1. Determine Audio Type (independent of naming)
+        # Late Fusion is based on predictions from Raw models, so we categorize it as Raw.
+        if s.startswith("Late_Fusion"):
+             audio_type = "Raw"
+        elif "Segmented" in s:
+             audio_type = "Segmented"
+        else:
+             audio_type = "Raw"
 
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+        # 2. explicit Renames to friendly names
+        # Combined -> Early Fusion
+        # Late_Fusion -> Late Fusion
+        config = s.replace("Combined", "Early Fusion").replace("Late_Fusion", "Late Fusion")
+        
+        # 3. Remove Type Tags (Segmented/Raw) to allow grouping on X-axis
+        tags = ["_Segmented_", "Segmented_", "_Segmented", 
+                "_Raw_", "Raw_", "_Raw"]
+        
+        for tag in tags:
+            config = config.replace(tag, " ")
+            
+        # 4. Cleanup
+        config = config.replace("_", " ").strip()
+        # Collapse multiple spaces
+        config = " ".join(config.split())
+        
+        return audio_type, config
+
+    plot_df[['Audio Type', 'Configuration']] = plot_df['Scenario'].apply(
+        lambda x: pd.Series(parse_scenario(x))
+    )
+
+    metrics = ['Accuracy', 'F1', 'Precision', 'Recall', 'Classification Error']
+    
+    # 3x2 Grid for 5 metrics
+    fig, axes = plt.subplots(3, 2, figsize=(16, 18))
     axes = axes.flatten()
 
     for i, metric in enumerate(metrics):
-        pivot = df.pivot_table(index='Scenario', columns='Model', values=metric, observed=False)
+        if metric in plot_df.columns:
+            sns.barplot(data=plot_df, x='Configuration', y=metric, hue='Audio Type', 
+                        ax=axes[i], palette="viridis", errorbar=None)
 
-        sns.heatmap(pivot, annot=True, fmt=".3f", cmap=palettes[i],
-                    ax=axes[i], cbar_kws={'label': metric})
+            # Add value annotations
+            for container in axes[i].containers:
+                axes[i].bar_label(container, fmt='%.2f', padding=3, fontsize=9)
 
-        axes[i].set_title(f'Comparative {metric}', fontsize=14, fontweight='bold', pad=10)
-        axes[i].set_ylabel('')
-        axes[i].set_xlabel('')
-        # Tilt x-labels for better readability
-        axes[i].set_xticklabels(axes[i].get_xticklabels(), rotation=15, ha='right')
+            axes[i].set_title(f'Comparative {metric}', fontsize=14, fontweight='bold', pad=10)
+            axes[i].set_ylabel(metric)
+            axes[i].set_xlabel('Configuration')
+            axes[i].set_xticklabels(axes[i].get_xticklabels(), rotation=15, ha='right')
+            
+            if i == 0:
+                axes[i].legend(title='Audio Type', loc='upper left')
+            else:
+                if axes[i].get_legend(): axes[i].get_legend().remove()
+        else:
+            axes[i].set_visible(False)
 
-    plt.suptitle('Global Pipeline Performance: Multi-Metric Analysis', fontsize=22, y=1.02)
+    # Hide empty 6th subplot
+    if len(metrics) < len(axes):
+        for j in range(len(metrics), len(axes)):
+            fig.delaxes(axes[j])
+
+    plt.suptitle('Global Pipeline Performance', fontsize=22, y=1.02)
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'global_metrics_dashboard.png'), bbox_inches='tight', dpi=300)
+    plt.savefig(os.path.join(output_dir, 'global_metrics_bar_charts.png'), bbox_inches='tight', dpi=300)
     plt.close()
 
-    # --- PART 2: THE AUC HEATMAP ---
-    plt.figure(figsize=(10, 7))
-    pivot_auc = df.pivot_table(index='Scenario', columns='Model', values='AUC', observed=False)
+    # AUC Bar Chart
+    plt.figure(figsize=(12, 7))
+    if 'AUC' in plot_df.columns:
+        ax = sns.barplot(data=plot_df, x='Configuration', y='AUC', hue='Audio Type', palette="magma", errorbar=None)
+        
+        # Add value annotations for AUC
+        for container in ax.containers:
+            ax.bar_label(container, fmt='%.2f', padding=3)
 
-    sns.heatmap(pivot_auc, annot=True, fmt=".3f", cmap="viridis", linewidths=.5)
-
-    plt.title('Consolidated AUC Performance Map', fontsize=16, pad=20)
-    plt.ylabel('Experimental Scenario', fontsize=12)
-    plt.xlabel('Classifier Architecture', fontsize=12)
-    plt.xticks(rotation=15, ha='right')
-
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'auc_heatmap.png'), dpi=300)
-    plt.close()
+        plt.title('Consolidated AUC Performance', fontsize=16, pad=20)
+        plt.ylabel('AUC Score')
+        plt.xlabel('Configuration')
+        plt.xticks(rotation=15, ha='right')
+        plt.legend(title='Audio Type', loc='lower right')
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, 'auc_comparison.png'), dpi=300)
+        plt.close()
 
     print(f"Visualizations generated in {output_dir}")
 
 def save_feature_importance(model, feature_names, output_image='feature_importance.png', output_csv='feature_weights.csv'):
-    # 1. Extract Coefficients
-    coefs = model.coef_[0]
+    if hasattr(model, 'coef_'):
+        coefs = model.coef_[0]
+    elif hasattr(model, 'feature_importances_'):
+        coefs = model.feature_importances_
+    else:
+        print("Model does not have coef_ or feature_importances_")
+        return
 
-    # 2. Create a DataFrame
+    transcript_features = [
+        'filler_ratio', 'pause_ratio', 'rep_ratio', 
+        'correction_ratio', 'error_ratio', 'self_correction_ratio', 
+        'words_per_minute'
+    ]
+    
+    def get_category(feat_name):
+        return "Transcript" if feat_name in transcript_features else "Audio"
+
     features_df = pd.DataFrame({
         'Feature': feature_names,
         'Weight': coefs
     })
 
-    # Add absolute values to identify the most influential features regardless of direction
+    features_df['Category'] = features_df['Feature'].apply(get_category)
     features_df['AbsWeight'] = features_df['Weight'].abs()
-
-    # Sort features from most impactful to least impactful
     features_df = features_df.sort_values(by='AbsWeight', ascending=False)
-
-    # 3. Save numerical weights to a CSV file
     features_df.to_csv(output_csv, index=False)
-    print(f"Numerical weights saved to: {output_csv}")
 
-    # 4. Prepare Visualization
-    top_df = features_df.head(20).sort_values(by='Weight')
+    top_df = features_df.head(20).copy()
+    top_df = top_df.sort_values(by='Weight', ascending=True)
 
     plt.figure(figsize=(12, 10))
-
-    # Conditional Coloring:
-    # Red (#d63031) for positive weights (indicates Dementia-prone traits)
-    # Blue (#0984e3) for negative weights (indicates Healthy-control traits)
-    colors = ['#d63031' if x > 0 else '#0984e3' for x in top_df['Weight']]
-
-    bars = plt.barh(top_df['Feature'], top_df['Weight'], color=colors, alpha=0.8)
-
-    # Add a vertical line at zero to clearly separate positive and negative influences
+    palette = {"Audio": "#1f77b4", "Transcript": "#ff7f0e"}
+    
+    sns.barplot(data=top_df, x='Weight', y='Feature', hue='Category', dodge=False, palette=palette)
     plt.axvline(x=0, color='black', linestyle='-', linewidth=0.8)
 
     # Labeling and Formatting
     plt.xlabel('SVM Coefficient Weight (Magnitude & Direction)', fontsize=12)
-    plt.title('Top 20 Features Influencing Dementia Detection\n(Red: Dementia-prone | Blue: Healthy-prone)', fontsize=14, fontweight='bold')
+    plt.title('Top 20 Features Influencing Dementia Detection', fontsize=14, fontweight='bold')
     plt.grid(axis='x', linestyle='--', alpha=0.5)
+    plt.legend(title='Feature Type')
 
     plt.tight_layout()
     plt.savefig(output_image, dpi=300)
-
     print(f"Feature importance plot saved to: {output_image}")

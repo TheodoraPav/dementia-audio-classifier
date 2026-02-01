@@ -10,7 +10,7 @@ from src.models import get_models
 from src.preprocess import get_uncorrelated_features
 from src.feature_selection import get_selected_features
 
-def train_and_evaluate(data_file, output_dir, scenario_name="Baseline", validation_method="group_kfold", use_filter=False, use_selection=False):
+def train_and_evaluate(data_file, output_dir, scenario_name="Baseline", validation_method="group_kfold", use_filter=False, use_selection=False, save_intermediate=False):
     print(f"\nStarting Training: {scenario_name} [{validation_method}]")
 
     #1. Load Data
@@ -91,6 +91,7 @@ def train_and_evaluate(data_file, output_dir, scenario_name="Baseline", validati
         
         y_true_all = []
         y_probs_all = []
+        y_files_all = []
         start_time = time.time()
         
         try:
@@ -130,11 +131,17 @@ def train_and_evaluate(data_file, output_dir, scenario_name="Baseline", validati
                 
                 y_true_all.extend(y_val)
                 y_probs_all.extend(probs)
+                
+                # Collect file names
+                if 'file_name' in df.columns:
+                     val_files = df['file_name'].iloc[val_idx].values
+                     y_files_all.extend(val_files)
             
             #5. Aggregate Results
             y_true_all = np.array(y_true_all)
             y_probs_all = np.array(y_probs_all)
             y_pred_all = (y_probs_all >= 0.5).astype(int)
+            y_files_all = np.array(y_files_all) if y_files_all else []
             
             end_time = time.time()
             elapsed_time = end_time - start_time
@@ -151,6 +158,7 @@ def train_and_evaluate(data_file, output_dir, scenario_name="Baseline", validati
                 'name': name,
                 'y_true': y_true_all,
                 'y_probs': y_probs_all,
+                'y_files': y_files_all,
                 'auc': metrics.get('AUC', 0)
             })
 
@@ -172,29 +180,30 @@ def train_and_evaluate(data_file, output_dir, scenario_name="Baseline", validati
             import traceback
             traceback.print_exc()
 
-    # Save Results
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    # Save Results only if requested
+    if save_intermediate:
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
 
-    # Generate unique filename safe for the scenario
-    safe_scenario = ""
-    prev_was_underscore = False
-    for c in scenario_name:
-        if c.isalnum():
-            safe_scenario += c
-            prev_was_underscore = False
-        elif not prev_was_underscore:
-            safe_scenario += "_"
-            prev_was_underscore = True
-    safe_scenario = safe_scenario.strip("_") + "_" + validation_method
+        # Generate unique filename safe for the scenario
+        safe_scenario = ""
+        prev_was_underscore = False
+        for c in scenario_name:
+            if c.isalnum():
+                safe_scenario += c
+                prev_was_underscore = False
+            elif not prev_was_underscore:
+                safe_scenario += "_"
+                prev_was_underscore = True
+        safe_scenario = safe_scenario.strip("_") + "_" + validation_method
 
-    # Save Metrics Table
-    save_metrics_to_excel(metrics_list, os.path.join(output_dir, f"results_{safe_scenario}.xlsx"))
+        # Save Metrics Table
+        save_metrics_to_excel(metrics_list, os.path.join(output_dir, f"results_{safe_scenario}.xlsx"))
 
-    # Save ROC Plot
-    plot_roc_comparison(roc_data_list, os.path.join(output_dir, f"roc_{safe_scenario}.png"))
+        # Save ROC Plot
+        plot_roc_comparison(roc_data_list, os.path.join(output_dir, f"roc_{safe_scenario}.png"))
 
-    return metrics_list
+    return metrics_list, roc_data_list # Return roc_data_list to access predictions
 
 if __name__ == "__main__":
     # Test run

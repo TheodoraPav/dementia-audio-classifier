@@ -10,6 +10,26 @@ from src.train_model import train_and_evaluate
 from src.preprocess_segments import preprocess_with_pyannote, preprocess_with_transcript
 from src.utils import generate_global_performance_charts
 from src.merge_txt_feature import extract_text_features_from_dir
+from src.late_fusion import fuse_predictions
+
+def save_model_predictions(roc_data, scenario, output_dir):
+    pred_dir = os.path.join(output_dir, "predictions")
+    if not os.path.exists(pred_dir): os.makedirs(pred_dir)
+    
+    saved_paths = {}
+    for item in roc_data:
+        model_name = item['name']
+        # Check if y_files is available
+        if 'y_files' in item and len(item['y_files']) > 0:
+            df = pd.DataFrame({
+                'file_name': item['y_files'],
+                'y_true': item['y_true'],
+                'y_probs': item['y_probs']
+            })
+            path = os.path.join(pred_dir, f"preds_{scenario}_{model_name}.csv")
+            df.to_csv(path, index=False)
+            saved_paths[model_name] = path
+    return saved_paths
 
 def main():
     # 1. Configuration
@@ -194,7 +214,7 @@ def main():
     for exp in EXPERIMENTS:
         current_file = feats_segmented_balanced  # Use balanced version
         #A.4 Train and Evaluate
-        metrics = train_and_evaluate(
+        metrics, _ = train_and_evaluate(
             current_file, 
             RESULTS_DIR, 
             scenario_name=f"Combined_Segmented_{exp['name']}", 
@@ -216,7 +236,7 @@ def main():
     for exp in EXPERIMENTS:
         current_file = current_base
         #B.1 Train and Evaluate
-        metrics = train_and_evaluate(
+        metrics, _ = train_and_evaluate(
             current_file, 
             RESULTS_DIR, 
             scenario_name=f"Combined_Raw_{exp['name']}",
@@ -250,7 +270,7 @@ def main():
     if os.path.exists(feats_text_only):
         for exp in EXPERIMENTS:
             current_file = feats_text_only
-            metrics = train_and_evaluate(
+            metrics, roc_data = train_and_evaluate(
                 current_file, 
                 RESULTS_DIR, 
                 scenario_name=f"TextOnly_Raw_{exp['name']}", 
@@ -258,6 +278,9 @@ def main():
                 use_filter=exp["use_filter"],
                 use_selection=exp["use_selection"]
             )
+            # Save predictions for Late Fusion
+            if exp['name'] == 'Baseline':
+                 save_model_predictions(roc_data, f"TextOnly_Raw_{exp['name']}", RESULTS_DIR)
             all_metrics.extend(metrics)
 
     # ==========================================
@@ -284,7 +307,7 @@ def main():
     if os.path.exists(feats_audio_only):
         for exp in EXPERIMENTS:
             current_file = feats_audio_only
-            metrics = train_and_evaluate(
+            metrics, roc_data = train_and_evaluate(
                 current_file, 
                 RESULTS_DIR, 
                 scenario_name=f"AudioOnly_Raw_{exp['name']}", 
@@ -292,6 +315,9 @@ def main():
                 use_filter=exp["use_filter"],
                 use_selection=exp["use_selection"]
             )
+            # Save predictions for Late Fusion
+            if exp['name'] == 'Baseline':
+                 save_model_predictions(roc_data, f"AudioOnly_Raw_{exp['name']}", RESULTS_DIR)
             all_metrics.extend(metrics)
 
     # ==========================================
@@ -318,7 +344,7 @@ def main():
     if os.path.exists(feats_audio_seg):
         for exp in EXPERIMENTS:
             current_file = feats_audio_seg
-            metrics = train_and_evaluate(
+            metrics, _ = train_and_evaluate(
                 current_file, 
                 RESULTS_DIR, 
                 scenario_name=f"AudioOnly_Segmented_{exp['name']}", 
@@ -352,7 +378,7 @@ def main():
     if os.path.exists(feats_text_seg):
         for exp in EXPERIMENTS:
             current_file = feats_text_seg
-            metrics = train_and_evaluate(
+            metrics, _ = train_and_evaluate(
                 current_file, 
                 RESULTS_DIR, 
                 scenario_name=f"TextOnly_Segmented_{exp['name']}", 
@@ -361,6 +387,31 @@ def main():
                 use_selection=exp["use_selection"]
             )
             all_metrics.extend(metrics)
+
+    # ==========================================
+    # PIPELINE G: Late Fusion (Raw Audio + Text)
+    # ==========================================
+    print("\n" + "="*50)
+    print("PIPELINE G: Late Fusion (Raw Audio + Text)")
+    print("="*50)
+    
+    pred_dir = os.path.join(RESULTS_DIR, "predictions")
+    models_to_fuse = ["SVM_Linear", "SVM_RBF", "Random_Forest", "XGBoost"]
+    
+    for model_name in models_to_fuse:
+        text_pred_file = os.path.join(pred_dir, f"preds_TextOnly_Raw_Baseline_{model_name}.csv")
+        audio_pred_file = os.path.join(pred_dir, f"preds_AudioOnly_Raw_Baseline_{model_name}.csv")
+        
+        if os.path.exists(text_pred_file) and os.path.exists(audio_pred_file):
+            print(f"Fusing predictions for {model_name}...")
+            # We can select fusion strategy here later if needed
+            fusion_metrics = fuse_predictions(text_pred_file, audio_pred_file, os.path.join(RESULTS_DIR, "late_fusion"))
+            
+            if fusion_metrics:
+                fusion_metrics['Model'] = model_name
+                fusion_metrics['Scenario'] = "Late_Fusion_Raw_Baseline" 
+                all_metrics.append(fusion_metrics)
+                print(f"Late Fusion {model_name}: Acc={fusion_metrics['Accuracy']:.3f}, AUC={fusion_metrics['AUC']:.3f}")
 
     # 4. Consolidate Results
     print("\n========================================")
