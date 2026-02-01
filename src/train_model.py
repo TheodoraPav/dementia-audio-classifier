@@ -138,7 +138,17 @@ def train_and_evaluate(data_file, output_dir, scenario_name="Baseline", validati
             })
 
             if name == "SVM_Linear":
-                save_feature_importance(model, X_train.columns, output_image=os.path.join(output_dir, scenario_name + '_final_svm_features.png'), output_csv=os.path.join(output_dir, scenario_name +'_final_svm_weights.csv'))
+                safe_scenario = ""
+                prev_was_underscore = False
+                for c in scenario_name:
+                    if c.isalnum():
+                        safe_scenario += c
+                        prev_was_underscore = False
+                    elif not prev_was_underscore:
+                        safe_scenario += "_"
+                        prev_was_underscore = True
+                safe_scenario = safe_scenario.strip("_")
+                save_feature_importance(model, X_train.columns, output_image=os.path.join(output_dir, safe_scenario + '_final_svm_features.png'), output_csv=os.path.join(output_dir, safe_scenario +'_final_svm_weights.csv'))
 
         except Exception as e:
             print(f"Error evaluating {name}: {e}")
@@ -150,7 +160,16 @@ def train_and_evaluate(data_file, output_dir, scenario_name="Baseline", validati
         os.makedirs(output_dir)
 
     # Generate unique filename safe for the scenario
-    safe_scenario = "".join([c if c.isalnum() else "_" for c in scenario_name]) + "_" + validation_method
+    safe_scenario = ""
+    prev_was_underscore = False
+    for c in scenario_name:
+        if c.isalnum():
+            safe_scenario += c
+            prev_was_underscore = False
+        elif not prev_was_underscore:
+            safe_scenario += "_"
+            prev_was_underscore = True
+    safe_scenario = safe_scenario.strip("_") + "_" + validation_method
 
     # Save Metrics Table
     save_metrics_to_excel(metrics_list, os.path.join(output_dir, f"results_{safe_scenario}.xlsx"))

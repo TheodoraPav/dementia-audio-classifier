@@ -4,7 +4,7 @@ from xgboost import XGBClassifier
 
 # Prioritize Class 1 (Dementia) by applying a higher penalty to False Negatives.
 # This forces the models to be more "sensitive" to patients, boosting Recall.
-custom_weights = {0: 1, 1: 2.5}
+custom_weights = {0: 1, 1: 1.5}
 
 def get_models():
     models = {

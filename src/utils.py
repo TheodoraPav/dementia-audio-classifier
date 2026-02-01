@@ -20,8 +20,16 @@ def evaluate_predictions(y_true, y_pred, y_probs=None, model_name="Model"):
 
     if y_probs is not None:
         try:
-            metrics["AUC"] = roc_auc_score(y_true, y_probs)
-        except ValueError:
+            if len(np.unique(y_true)) < 2:
+                print(f"Warning: {model_name} - Only one class present in y_true, cannot calculate AUC")
+                metrics["AUC"] = np.nan
+            elif len(np.unique(y_probs)) < 2:
+                print(f"Warning: {model_name} - All predicted probabilities are identical, cannot calculate AUC")
+                metrics["AUC"] = np.nan
+            else:
+                metrics["AUC"] = roc_auc_score(y_true, y_probs)
+        except (ValueError, Exception) as e:
+            print(f"Warning: {model_name} - Error calculating AUC: {e}")
             metrics["AUC"] = np.nan
 
     return metrics

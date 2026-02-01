@@ -43,6 +43,12 @@ def main():
             print("Skipping preprocessing. Using existing data.")
 
     if run_preprocessing:
+        if not os.path.exists(RAW_DATA_DIR):
+            print(f"Warning: Raw data directory not found at: {RAW_DATA_DIR}")
+            print("Skipping preprocessing. Will use existing segmented data if available.")
+            run_preprocessing = False
+    
+    if run_preprocessing:
         print("Select Preprocessing Method:")
         print("1. Pyannote (Speaker Diarization)")
         print("2. Transcript-Based (Exact Timestamps)")
@@ -54,25 +60,42 @@ def main():
             preprocess_with_transcript(RAW_DATA_DIR, SEGMENTED_DATA_DIR, TRANSCRIPTION_DIR, 5.0)
 
     # 2. Extract Features
-    if not os.path.exists(RAW_DATA_DIR):
-        print(f"Error: Raw data directory not found at: {RAW_DATA_DIR}")
-        return
-
     features_file_path = os.path.join(FEATURES_DIR, "features_dataset.xlsx")
 
-    # Extract Text Features (Once)
-    print("Extracting Text Features...")
-    text_df = extract_text_features_from_dir(TRANSCRIPTION_DIR)
+    # Check if raw data exists
+    raw_data_exists = os.path.exists(RAW_DATA_DIR)
+    if not raw_data_exists:
+        print(f"\nWarning: Raw data directory not found at: {RAW_DATA_DIR}")
+        print("Will attempt to use existing processed features if available.")
+
+    # Extract Text Features (Only if transcription directory exists)
+    text_df = pd.DataFrame()
+    if os.path.exists(TRANSCRIPTION_DIR):
+        print("Extracting Text Features...")
+        text_df = extract_text_features_from_dir(TRANSCRIPTION_DIR)
+    else:
+        print(f"Warning: Transcription directory not found at: {TRANSCRIPTION_DIR}")
+        print("Skipping text feature extraction.")
 
     should_extract = True
     if os.path.exists(features_file_path):
         print(f"Features file found at: {features_file_path}")
-        user_response = input("Do you want to overwrite it and re-extract features? (y/n): ").strip().lower()
-        if user_response != 'y':
-            should_extract = False
-            print("Using existing features.")
+        if raw_data_exists:
+            user_response = input("Do you want to overwrite it and re-extract features? (y/n): ").strip().lower()
+            if user_response != 'y':
+                should_extract = False
+                print("Using existing features.")
+            else:
+                print("Re-extracting features...")
         else:
-            print("Re-extracting features...")
+            should_extract = False
+            print("Raw data not available. Using existing features.")
+    elif not raw_data_exists:
+        print("Error: No processed features found and raw data is missing.")
+        print("Please either:")
+        print("  1. Add the raw data to ADReSS-IS2020-train/, OR")
+        print("  2. Pull the processed features from Git (git pull)")
+        return
     
 
     if should_extract:
@@ -114,30 +137,11 @@ def main():
             "use_filter": True,
             "use_selection": False,
             "suffix": "corr95"
-        },
-        {
-            "name": "Common Features (Intersection)",
-            "use_filter": False,
-            "use_selection": True,
-            "suffix": "intersection"
-        },
-        {
-            "name": "Combined (Filter + Selection)",
-            "use_filter": True,
-            "use_selection": True,
-            "suffix": "combined"
         }
     ]
 
     all_metrics = []
 
-    # ==========================================
-    # PIPELINE A: Segmented + GroupKFold
-    # ==========================================
-    print("\n" + "="*50)
-    print("PIPELINE A: Segmented Audio + GroupKFold")
-    print("="*50)
-    
     feats_segmented = os.path.join(FEATURES_DIR, "features_segmented.xlsx")
     
     # A.1 Extract Segmented Features
@@ -170,14 +174,20 @@ def main():
                 print(f"Merged segmented features saved to {feats_segmented}")
         else:
             print("Text features already present in segmented data.")
-    
+            
+    # ==========================================
+    # PIPELINE A: Segmented + GroupKFold
+    # ==========================================
+    print("\n" + "="*50)
+    print("PIPELINE A: Segmented Audio + GroupKFold")
+    print("="*50)
     for exp in EXPERIMENTS:
         current_file = feats_segmented
         #A.3 Train and Evaluate
         metrics = train_and_evaluate(
             current_file, 
             RESULTS_DIR, 
-            scenario_name=f"Prop_{exp['name']}", 
+            scenario_name=f"Combined_Segmented_{exp['name']}", 
             validation_method="group_kfold",
             use_filter=exp["use_filter"],
             use_selection=exp["use_selection"]
@@ -199,12 +209,148 @@ def main():
         metrics = train_and_evaluate(
             current_file, 
             RESULTS_DIR, 
-            scenario_name=f"Base_{exp['name']}",
+            scenario_name=f"Combined_Raw_{exp['name']}",
             validation_method="loocv",
             use_filter=exp["use_filter"],
             use_selection=exp["use_selection"]
         )
         all_metrics.extend(metrics)
+
+    # ==========================================
+    # PIPELINE C: Text-Only Features + LOOCV
+    # ==========================================
+    print("\n" + "="*50)
+    print("PIPELINE C: Text-Only Features + LOOCV")
+    print("="*50)
+    
+    feats_text_only = os.path.join(FEATURES_DIR, "features_text_only.xlsx")
+    
+    if os.path.exists(base_features_file):
+        df_full = pd.read_excel(base_features_file)
+        text_feature_cols = ['filler_ratio', 'pause_ratio', 'rep_ratio', 'error_ratio', 
+                            'correction_ratio', 'self_correction_ratio', 'words_per_minute']
+        
+        required_cols = ['file_name', 'label'] + text_feature_cols
+        df_text = df_full[required_cols]
+        df_text.to_excel(feats_text_only, index=False)
+        print(f"Text-only features saved to {feats_text_only}")
+    else:
+        print(f"Error: Base features file not found at {base_features_file}")
+    
+    if os.path.exists(feats_text_only):
+        for exp in EXPERIMENTS:
+            current_file = feats_text_only
+            metrics = train_and_evaluate(
+                current_file, 
+                RESULTS_DIR, 
+                scenario_name=f"TextOnly_Raw_{exp['name']}", 
+                validation_method="loocv",
+                use_filter=exp["use_filter"],
+                use_selection=exp["use_selection"]
+            )
+            all_metrics.extend(metrics)
+
+    # ==========================================
+    # PIPELINE D: Audio-Only Features + LOOCV
+    # ==========================================
+    print("\n" + "="*50)
+    print("PIPELINE D: Audio-Only Features + LOOCV")
+    print("="*50)
+    
+    feats_audio_only = os.path.join(FEATURES_DIR, "features_audio_only.xlsx")
+    
+    if os.path.exists(base_features_file):
+        df_full = pd.read_excel(base_features_file)
+        text_feature_cols = ['filler_ratio', 'pause_ratio', 'rep_ratio', 'error_ratio', 
+                            'correction_ratio', 'self_correction_ratio', 'words_per_minute']
+        
+        audio_cols = [col for col in df_full.columns if col not in text_feature_cols]
+        df_audio = df_full[audio_cols]
+        df_audio.to_excel(feats_audio_only, index=False)
+        print(f"Audio-only features saved to {feats_audio_only}")
+    else:
+        print(f"Error: Base features file not found at {base_features_file}")
+    
+    if os.path.exists(feats_audio_only):
+        for exp in EXPERIMENTS:
+            current_file = feats_audio_only
+            metrics = train_and_evaluate(
+                current_file, 
+                RESULTS_DIR, 
+                scenario_name=f"AudioOnly_Raw_{exp['name']}", 
+                validation_method="loocv",
+                use_filter=exp["use_filter"],
+                use_selection=exp["use_selection"]
+            )
+            all_metrics.extend(metrics)
+
+    # ==========================================
+    # PIPELINE E: Audio-Only + Segmented + GroupKFold
+    # ==========================================
+    print("\n" + "="*50)
+    print("PIPELINE E: Audio-Only + Segmented + GroupKFold")
+    print("="*50)
+    
+    feats_audio_seg = os.path.join(FEATURES_DIR, "features_audio_segmented.xlsx")
+    
+    if os.path.exists(feats_segmented):
+        df_seg = pd.read_excel(feats_segmented)
+        text_feature_cols = ['filler_ratio', 'pause_ratio', 'rep_ratio', 'error_ratio', 
+                            'correction_ratio', 'self_correction_ratio', 'words_per_minute']
+        
+        audio_cols = [col for col in df_seg.columns if col not in text_feature_cols]
+        df_audio_seg = df_seg[audio_cols]
+        df_audio_seg.to_excel(feats_audio_seg, index=False)
+        print(f"Audio-only segmented features saved to {feats_audio_seg}")
+    else:
+        print(f"Error: Segmented features file not found at {feats_segmented}")
+    
+    if os.path.exists(feats_audio_seg):
+        for exp in EXPERIMENTS:
+            current_file = feats_audio_seg
+            metrics = train_and_evaluate(
+                current_file, 
+                RESULTS_DIR, 
+                scenario_name=f"AudioOnly_Segmented_{exp['name']}", 
+                validation_method="group_kfold",
+                use_filter=exp["use_filter"],
+                use_selection=exp["use_selection"]
+            )
+            all_metrics.extend(metrics)
+
+    # ==========================================
+    # PIPELINE F: Text-Only + Segmented + GroupKFold
+    # ==========================================
+    print("\n" + "="*50)
+    print("PIPELINE F: Text-Only + Segmented + GroupKFold")
+    print("="*50)
+    
+    feats_text_seg = os.path.join(FEATURES_DIR, "features_text_segmented.xlsx")
+    
+    if os.path.exists(feats_segmented):
+        df_seg = pd.read_excel(feats_segmented)
+        text_feature_cols = ['filler_ratio', 'pause_ratio', 'rep_ratio', 'error_ratio', 
+                            'correction_ratio', 'self_correction_ratio', 'words_per_minute']
+        
+        required_cols = ['file_name', 'label'] + text_feature_cols
+        df_text_seg = df_seg[required_cols]
+        df_text_seg.to_excel(feats_text_seg, index=False)
+        print(f"Text-only segmented features saved to {feats_text_seg}")
+    else:
+        print(f"Error: Segmented features file not found at {feats_segmented}")
+    
+    if os.path.exists(feats_text_seg):
+        for exp in EXPERIMENTS:
+            current_file = feats_text_seg
+            metrics = train_and_evaluate(
+                current_file, 
+                RESULTS_DIR, 
+                scenario_name=f"TextOnly_Segmented_{exp['name']}", 
+                validation_method="group_kfold",
+                use_filter=exp["use_filter"],
+                use_selection=exp["use_selection"]
+            )
+            all_metrics.extend(metrics)
 
     # 4. Consolidate Results
     print("\n========================================")

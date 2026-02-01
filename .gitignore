@@ -11,9 +11,12 @@ venv/
 ENV/
 
 # Data and Results
-data/
+data/*
+!data/processed/
+!data/processed/*.xlsx
 outputs/
 *.xlsx
-*.csv
+!data/processed/*.xlsx
+
 # Ignore large dataset folders if they are inside the repo
 ADReSS-IS2020-train/

@@ -97,7 +97,7 @@ def preprocess_with_pyannote(raw_data_dir, output_dir, segment_duration=5.0):
     print("Preprocessing V2 Complete!")
 
 # ==========================================================
-# Transcript-Based Preprocessing (V3)
+# Transcript-Based Preprocessing
 # ==========================================================
 import re
 
@@ -119,7 +119,7 @@ def parse_timestamps_v3(line):
 
 def preprocess_with_transcript(raw_data_dir, output_dir, transcription_dir, segment_duration=5.0):
     print("==================================================")
-    print("   Audio Preprocessing: Transcript-Based (V3)     ")
+    print("   Audio Preprocessing: Transcript-Based     ")
     print("==================================================")
     
     CLASSES = ["cc", "cd"]
