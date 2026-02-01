@@ -174,21 +174,31 @@ def main():
                 print(f"Merged segmented features saved to {feats_segmented}")
         else:
             print("Text features already present in segmented data.")
+    
+    # A.3 Balance Segmented Features (stratified sampling based on median)
+    feats_segmented_balanced = os.path.join(FEATURES_DIR, "features_segmented_balanced.xlsx")
+    
+    if os.path.exists(feats_segmented) and not os.path.exists(feats_segmented_balanced):
+        print("\nBalancing segmented features (stratified sampling, target=median)...")
+        from balance_segments_stratified import balance_segments_stratified
+        balance_segments_stratified(feats_segmented, feats_segmented_balanced, 'median')
+    elif os.path.exists(feats_segmented_balanced):
+        print(f"Balanced segmented features already exist at {feats_segmented_balanced}")
             
     # ==========================================
-    # PIPELINE A: Segmented + GroupKFold
+    # PIPELINE A: Segmented + Leave-One-Group-Out
     # ==========================================
     print("\n" + "="*50)
-    print("PIPELINE A: Segmented Audio + GroupKFold")
+    print("PIPELINE A: Segmented Audio + Leave-One-Group-Out")
     print("="*50)
     for exp in EXPERIMENTS:
-        current_file = feats_segmented
-        #A.3 Train and Evaluate
+        current_file = feats_segmented_balanced  # Use balanced version
+        #A.4 Train and Evaluate
         metrics = train_and_evaluate(
             current_file, 
             RESULTS_DIR, 
             scenario_name=f"Combined_Segmented_{exp['name']}", 
-            validation_method="group_kfold",
+            validation_method="leave_one_group_out",
             use_filter=exp["use_filter"],
             use_selection=exp["use_selection"]
         )
@@ -285,16 +295,16 @@ def main():
             all_metrics.extend(metrics)
 
     # ==========================================
-    # PIPELINE E: Audio-Only + Segmented + GroupKFold
+    # PIPELINE E: Audio-Only + Segmented + Leave-One-Group-Out
     # ==========================================
     print("\n" + "="*50)
-    print("PIPELINE E: Audio-Only + Segmented + GroupKFold")
+    print("PIPELINE E: Audio-Only + Segmented + Leave-One-Group-Out")
     print("="*50)
     
-    feats_audio_seg = os.path.join(FEATURES_DIR, "features_audio_segmented.xlsx")
+    feats_audio_seg = os.path.join(FEATURES_DIR, "features_audio_segmented_balanced.xlsx")
     
-    if os.path.exists(feats_segmented):
-        df_seg = pd.read_excel(feats_segmented)
+    if os.path.exists(feats_segmented_balanced):
+        df_seg = pd.read_excel(feats_segmented_balanced)
         text_feature_cols = ['filler_ratio', 'pause_ratio', 'rep_ratio', 'error_ratio', 
                             'correction_ratio', 'self_correction_ratio', 'words_per_minute']
         
@@ -303,7 +313,7 @@ def main():
         df_audio_seg.to_excel(feats_audio_seg, index=False)
         print(f"Audio-only segmented features saved to {feats_audio_seg}")
     else:
-        print(f"Error: Segmented features file not found at {feats_segmented}")
+        print(f"Error: Balanced segmented features file not found at {feats_segmented_balanced}")
     
     if os.path.exists(feats_audio_seg):
         for exp in EXPERIMENTS:
@@ -312,23 +322,23 @@ def main():
                 current_file, 
                 RESULTS_DIR, 
                 scenario_name=f"AudioOnly_Segmented_{exp['name']}", 
-                validation_method="group_kfold",
+                validation_method="leave_one_group_out",
                 use_filter=exp["use_filter"],
                 use_selection=exp["use_selection"]
             )
             all_metrics.extend(metrics)
 
     # ==========================================
-    # PIPELINE F: Text-Only + Segmented + GroupKFold
+    # PIPELINE F: Text-Only + Segmented + Leave-One-Group-Out
     # ==========================================
     print("\n" + "="*50)
-    print("PIPELINE F: Text-Only + Segmented + GroupKFold")
+    print("PIPELINE F: Text-Only + Segmented + Leave-One-Group-Out")
     print("="*50)
     
-    feats_text_seg = os.path.join(FEATURES_DIR, "features_text_segmented.xlsx")
+    feats_text_seg = os.path.join(FEATURES_DIR, "features_text_segmented_balanced.xlsx")
     
-    if os.path.exists(feats_segmented):
-        df_seg = pd.read_excel(feats_segmented)
+    if os.path.exists(feats_segmented_balanced):
+        df_seg = pd.read_excel(feats_segmented_balanced)
         text_feature_cols = ['filler_ratio', 'pause_ratio', 'rep_ratio', 'error_ratio', 
                             'correction_ratio', 'self_correction_ratio', 'words_per_minute']
         
@@ -337,7 +347,7 @@ def main():
         df_text_seg.to_excel(feats_text_seg, index=False)
         print(f"Text-only segmented features saved to {feats_text_seg}")
     else:
-        print(f"Error: Segmented features file not found at {feats_segmented}")
+        print(f"Error: Balanced segmented features file not found at {feats_segmented_balanced}")
     
     if os.path.exists(feats_text_seg):
         for exp in EXPERIMENTS:
@@ -346,7 +356,7 @@ def main():
                 current_file, 
                 RESULTS_DIR, 
                 scenario_name=f"TextOnly_Segmented_{exp['name']}", 
-                validation_method="group_kfold",
+                validation_method="leave_one_group_out",
                 use_filter=exp["use_filter"],
                 use_selection=exp["use_selection"]
             )

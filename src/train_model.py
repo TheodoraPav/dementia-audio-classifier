@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 import time
-from sklearn.model_selection import GroupKFold, LeaveOneOut, cross_val_predict
+from sklearn.model_selection import GroupKFold, LeaveOneOut, LeaveOneGroupOut, cross_val_predict
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from src.utils import evaluate_predictions, save_metrics_to_excel, plot_roc_comparison, save_feature_importance
@@ -54,6 +54,23 @@ def train_and_evaluate(data_file, output_dir, scenario_name="Baseline", validati
 
         groups = df['file_name'].apply(extract_id).values
         cv = GroupKFold(n_splits=5)
+    
+    elif validation_method == "leave_one_group_out":
+        if 'file_name' not in df.columns:
+             print("Error: 'file_name' missing for LeaveOneGroupOut.")
+             return []
+             
+        # Extract Groups (Subject IDs)
+        def extract_id(filename):
+            name = os.path.splitext(filename)[0]
+            parts = name.rsplit('_', 1) 
+            if len(parts) > 1: return parts[0]
+            return name
+
+        groups = df['file_name'].apply(extract_id).values
+        n_groups = len(np.unique(groups))
+        print(f"Using Leave-One-Group-Out: {n_groups} patients, {len(df)} total segments")
+        cv = LeaveOneGroupOut()
         
     elif validation_method == "loocv":
         cv = LeaveOneOut()
