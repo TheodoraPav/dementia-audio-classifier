@@ -243,3 +243,96 @@ def preprocess_with_transcript(raw_data_dir, output_dir, transcription_dir, segm
                 
         print(f"Generated {total_chunks} chunks for '{cls}'.")
 
+
+# ==========================================================
+# Continuous Patient Audio (No Chunking)
+# ==========================================================
+
+def preprocess_continuous_patient_audio(raw_data_dir, output_dir, transcription_dir):
+    print("==================================================")
+    print("   Audio Preprocessing: Continuous Patient Audio")
+    print("==================================================")
+    
+    CLASSES = ["cc", "cd"]
+    
+    for cls in CLASSES:
+        in_path = os.path.join(raw_data_dir, cls)
+        trans_path = os.path.join(transcription_dir, cls)
+        out_path = os.path.join(output_dir, cls)
+        
+        if not os.path.exists(in_path): 
+            continue
+        os.makedirs(out_path, exist_ok=True)
+        
+        files = [f for f in os.listdir(in_path) if f.endswith(".wav")]
+        print(f"\nProcessing '{cls}' ({len(files)} files)...")
+        total_files = 0
+        
+        for f in files:
+            basename = os.path.splitext(f)[0]
+            wav_file = os.path.join(in_path, f)
+            cha_file = os.path.join(trans_path, f"{basename}.cha")
+            
+            if not os.path.exists(cha_file):
+                print(f"Skipping {f}: Transcript not found at {cha_file}")
+                continue
+                
+            try:
+                # Read Audio
+                sample_rate, audio_data = wavfile.read(wav_file)
+                if len(audio_data.shape) > 1:
+                    audio_data = np.mean(audio_data, axis=1)  # Convert to mono
+                
+                with open(cha_file, 'r', encoding='utf-8') as cf:
+                    lines = cf.readlines()
+                    
+                # Collect all patient segments
+                patient_segments = []
+                
+                for i, line in enumerate(lines):
+                    line = line.strip()
+                    
+                    if line.startswith("*PAR:"):
+                        s, e = parse_timestamps_v3(line)
+                        if s is None:
+                            # Check next line for timestamp
+                            if i + 1 < len(lines) and lines[i+1].strip().startswith("%snd"):
+                                s, e = parse_timestamps_v3(lines[i+1])
+                        
+                        if s is not None:
+                            # Convert ms to samples
+                            start_sample = int(s * sample_rate / 1000)
+                            end_sample = int(e * sample_rate / 1000)
+                            
+                            # Validate bounds
+                            if start_sample >= len(audio_data):
+                                continue
+                            if end_sample > len(audio_data):
+                                end_sample = len(audio_data)
+                            if end_sample <= start_sample:
+                                continue
+                            
+                            # Extract segment
+                            segment = audio_data[start_sample:end_sample]
+                            patient_segments.append(segment)
+                
+                # Concatenate all patient segments
+                if patient_segments:
+                    continuous_audio = np.concatenate(patient_segments)
+                    
+                    # Save as single continuous file
+                    out_name = f"{basename}.wav"
+                    out_full = os.path.join(out_path, out_name)
+                    wavfile.write(out_full, sample_rate, continuous_audio.astype(np.int16))
+                    total_files += 1
+                    print(f"  Created continuous audio for {basename}: {len(continuous_audio)/sample_rate:.2f}s")
+                else:
+                    print(f"  Warning: No patient segments found for {basename}")
+                    
+            except Exception as e:
+                print(f"Error processing {f}: {e}")
+                
+        print(f"Generated {total_files} continuous audio files for '{cls}'.")
+    
+    print("\nContinuous Patient Audio Preprocessing Complete!")
+

@@ -13,6 +13,8 @@ The project is organized into a modular pipeline:
 *   `src/models.py`: Repository for model architectures and classifier configurations.
 *   `src/train_model.py`: Module for model training, cross-validation execution, and metric reporting.
 *   `src/utils.py`: Helper functions for calculating performance metrics and generating plots.
+*   `src/late_fusion.py`: Implements late fusion strategy combining Audio-Only and Text-Only predictions.
+*   `balance_segments_stratified.py`: Balances segmented dataset using stratified sampling.
 *   `main.py`: The entry point script that orchestrates the full pipeline.
 
 ## Installation
@@ -40,15 +42,17 @@ python main.py
 
 ## Pipeline Structure
 
-The system runs **6 pipelines** with **2 experiments** each (Baseline and Filtered), evaluating **4 models** per pipeline:
+The system runs **8 pipelines** with **2 experiments** each (Baseline and Filtered), evaluating **4 models** per pipeline:
 
 ### Pipelines
-1. **Combined_Segmented** - Audio + Text features, Segmented audio, GroupKFold validation
+1. **Combined_Segmented** - Audio + Text features, Segmented audio, Leave-One-Group-Out validation
 2. **Combined_Raw** - Audio + Text features, Raw audio, LOOCV validation
 3. **TextOnly_Raw** - Text features only, Raw audio, LOOCV validation
 4. **AudioOnly_Raw** - Audio features only, Raw audio, LOOCV validation
-5. **AudioOnly_Segmented** - Audio features only, Segmented audio, GroupKFold validation
-6. **TextOnly_Segmented** - Text features only, Segmented audio, GroupKFold validation
+5. **AudioOnly_Segmented** - Audio features only, Segmented audio, Leave-One-Group-Out validation
+6. **TextOnly_Segmented** - Text features only, Segmented audio, Leave-One-Group-Out validation
+7. **Late_Fusion** - Combined predictions from Audio-Only and Text-Only models (Raw audio, LOOCV)
+8. **Continuous_Audio** - Audio + Text features from continuous patient audio, LOOCV validation
 
 ### Models
 - SVM (Linear)
@@ -59,19 +63,31 @@ The system runs **6 pipelines** with **2 experiments** each (Baseline and Filter
 ### Outputs
 *   **Processed Features**: `data/processed/features_*.xlsx` (tracked in Git)
 *   **Consolidated Report**: `outputs/final_consolidated_report.xlsx`
-*   **ROC Curves**: `outputs/roc_*.png`
-*   **Results Tables**: `outputs/results_*.xlsx`
+*   **ROC Curves**: `outputs/roc_*.png` (per-scenario)
+*   **Results Tables**: `outputs/results_*.xlsx` (per-scenario)
+*   **SVM Feature Importance**: `outputs/*_final_svm_features.png` and `*_final_svm_weights.csv`
+*   **Global Performance Charts**: `outputs/global_metrics_bar_charts.png` and `outputs/auc_comparison.png`
+*   **Predictions**: `outputs/predictions/preds_*.csv` (for Late Fusion)
+*   **Late Fusion Results**: `outputs/late_fusion/fused_predictions.csv`
 
 ## Key Features
 
 ### 1. Advanced Audio Preprocessing
-The pipeline supports two methods for splitting patient audio:
-*   **Pyannote Diarization**: Uses speaker diarization to separate patient speech.
-*   **Transcript-Based**: Uses `.cha` transcription files for exact timestamp extraction.
+The pipeline supports three methods for processing patient audio:
+*   **Pyannote Diarization**: Uses speaker diarization to separate patient speech into 5-second segments.
+*   **Transcript-Based Segmentation**: Uses `.cha` transcription files for exact timestamp extraction into 5-second segments.
+*   **Continuous Patient Audio**: Merges all patient speech segments into one continuous audio file per patient.
 
 ### 2. Feature Extraction
 *   **Audio Features**: Acoustic features using `pyAudioAnalysis` (MFCCs, spectral features, etc.).
-*   **Text Features**: Linguistic markers from transcriptions (filler ratio, pause ratio, words per minute, etc.).
+*   **Text Features**: Linguistic markers from transcriptions including:
+    - Filler ratio (`um`, `uh`)
+    - Pause ratio (`&=laugh`, `&=cough`, etc.)
+    - Repetition ratio (`[/]`)
+    - Error ratio (`[*]`)
+    - Correction ratio (`[//]`)
+    - Self-correction ratio (utterances with self-corrections)
+    - Words per minute (speech rate)
 
 ### 3. Feature Selection
 *   **Remove Correlated Features**: Eliminates redundant features with high correlation (>95%).

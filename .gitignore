@@ -10,6 +10,12 @@ env/
 venv/
 ENV/
 
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
 # Data and Results
 data/*
 !data/processed/
@@ -18,5 +24,12 @@ outputs/
 *.xlsx
 !data/processed/*.xlsx
 
+# Generated audio data
+data/segmented_audio/
+data/continuous_patient_audio/
+
 # Ignore large dataset folders if they are inside the repo
 ADReSS-IS2020-train/
+
+# External dependencies
+pyAudioAnalysis/

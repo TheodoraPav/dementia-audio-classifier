@@ -7,7 +7,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from src.feature_extraction import extract_features
 from src.train_model import train_and_evaluate
-from src.preprocess_segments import preprocess_with_pyannote, preprocess_with_transcript
+from src.preprocess_segments import preprocess_with_pyannote, preprocess_with_transcript, preprocess_continuous_patient_audio
 from src.utils import generate_global_performance_charts
 from src.merge_txt_feature import extract_text_features_from_dir
 from src.late_fusion import fuse_predictions
@@ -36,6 +36,7 @@ def main():
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     RAW_DATA_DIR = os.path.join(BASE_DIR, "ADReSS-IS2020-train", "train", "Full_wave_enhanced_audio")
     SEGMENTED_DATA_DIR = os.path.join(BASE_DIR, "data", "segmented_audio")
+    CONTINUOUS_AUDIO_DIR = os.path.join(BASE_DIR, "data", "continuous_patient_audio")
     FEATURES_DIR = os.path.join(BASE_DIR, "data", "processed")
     RESULTS_DIR = os.path.join(BASE_DIR, "outputs")
     TRANSCRIPTION_DIR = os.path.join(BASE_DIR, "ADReSS-IS2020-train", "train", "transcription")
@@ -78,6 +79,22 @@ def main():
             preprocess_with_pyannote(RAW_DATA_DIR, SEGMENTED_DATA_DIR, 5.0)
         else:
             preprocess_with_transcript(RAW_DATA_DIR, SEGMENTED_DATA_DIR, TRANSCRIPTION_DIR, 5.0)
+    
+    # Continuous Patient Audio Preprocessing (automatic)
+    if not os.path.exists(CONTINUOUS_AUDIO_DIR) or not os.listdir(CONTINUOUS_AUDIO_DIR):
+        if os.path.exists(RAW_DATA_DIR) and os.path.exists(TRANSCRIPTION_DIR):
+            print("\nContinuous patient audio not found. Creating automatically...")
+            preprocess_continuous_patient_audio(RAW_DATA_DIR, CONTINUOUS_AUDIO_DIR, TRANSCRIPTION_DIR)
+        else:
+            print("\nSkipping continuous audio creation: Raw data or transcripts not found.")
+    else:
+        print(f"\nContinuous patient audio found at: {CONTINUOUS_AUDIO_DIR}")
+        user_input = input("Do you want to recreate continuous patient audio? (y/n): ").strip().lower()
+        if user_input in ['y', 'yes']:
+            print("Recreating continuous patient audio...")
+            preprocess_continuous_patient_audio(RAW_DATA_DIR, CONTINUOUS_AUDIO_DIR, TRANSCRIPTION_DIR)
+        else:
+            print("Using existing continuous patient audio.")
 
     # 2. Extract Features
     features_file_path = os.path.join(FEATURES_DIR, "features_dataset.xlsx")
@@ -206,10 +223,10 @@ def main():
         print(f"Balanced segmented features already exist at {feats_segmented_balanced}")
             
     # ==========================================
-    # PIPELINE A: Segmented + Leave-One-Group-Out
+    # PIPELINE: Segmented + Leave-One-Group-Out
     # ==========================================
     print("\n" + "="*50)
-    print("PIPELINE A: Segmented Audio + Leave-One-Group-Out")
+    print("PIPELINE: Segmented Audio + Leave-One-Group-Out")
     print("="*50)
     for exp in EXPERIMENTS:
         current_file = feats_segmented_balanced  # Use balanced version
@@ -225,10 +242,10 @@ def main():
         all_metrics.extend(metrics)
 
     # ==========================================
-    # PIPELINE B: Baseline (Raw Audio + LOOCV)
+    # PIPELINE: Baseline (Raw Audio + LOOCV)
     # ==========================================
     print("\n" + "="*50)
-    print("PIPELINE B: Raw Audio + LOOCV")
+    print("PIPELINE: Raw Audio + LOOCV")
     print("="*50)
 
     current_base = base_features_file
@@ -247,10 +264,10 @@ def main():
         all_metrics.extend(metrics)
 
     # ==========================================
-    # PIPELINE C: Text-Only Features + LOOCV
+    # PIPELINE: Text-Only Features + LOOCV
     # ==========================================
     print("\n" + "="*50)
-    print("PIPELINE C: Text-Only Features + LOOCV")
+    print("PIPELINE: Text-Only Features + LOOCV")
     print("="*50)
     
     feats_text_only = os.path.join(FEATURES_DIR, "features_text_only.xlsx")
@@ -284,10 +301,10 @@ def main():
             all_metrics.extend(metrics)
 
     # ==========================================
-    # PIPELINE D: Audio-Only Features + LOOCV
+    # PIPELINE: Audio-Only Features + LOOCV
     # ==========================================
     print("\n" + "="*50)
-    print("PIPELINE D: Audio-Only Features + LOOCV")
+    print("PIPELINE: Audio-Only Features + LOOCV")
     print("="*50)
     
     feats_audio_only = os.path.join(FEATURES_DIR, "features_audio_only.xlsx")
@@ -321,10 +338,10 @@ def main():
             all_metrics.extend(metrics)
 
     # ==========================================
-    # PIPELINE E: Audio-Only + Segmented + Leave-One-Group-Out
+    # PIPELINE: Audio-Only + Segmented + Leave-One-Group-Out
     # ==========================================
     print("\n" + "="*50)
-    print("PIPELINE E: Audio-Only + Segmented + Leave-One-Group-Out")
+    print("PIPELINE: Audio-Only + Segmented + Leave-One-Group-Out")
     print("="*50)
     
     feats_audio_seg = os.path.join(FEATURES_DIR, "features_audio_segmented_balanced.xlsx")
@@ -355,10 +372,10 @@ def main():
             all_metrics.extend(metrics)
 
     # ==========================================
-    # PIPELINE F: Text-Only + Segmented + Leave-One-Group-Out
+    # PIPELINE: Text-Only + Segmented + Leave-One-Group-Out
     # ==========================================
     print("\n" + "="*50)
-    print("PIPELINE F: Text-Only + Segmented + Leave-One-Group-Out")
+    print("PIPELINE: Text-Only + Segmented + Leave-One-Group-Out")
     print("="*50)
     
     feats_text_seg = os.path.join(FEATURES_DIR, "features_text_segmented_balanced.xlsx")
@@ -389,10 +406,10 @@ def main():
             all_metrics.extend(metrics)
 
     # ==========================================
-    # PIPELINE G: Late Fusion (Raw Audio + Text)
+    # PIPELINE: Late Fusion (Raw Audio + Text)
     # ==========================================
     print("\n" + "="*50)
-    print("PIPELINE G: Late Fusion (Raw Audio + Text)")
+    print("PIPELINE: Late Fusion (Raw Audio + Text)")
     print("="*50)
     
     pred_dir = os.path.join(RESULTS_DIR, "predictions")
@@ -412,6 +429,65 @@ def main():
                 fusion_metrics['Scenario'] = "Late_Fusion_Raw_Baseline" 
                 all_metrics.append(fusion_metrics)
                 print(f"Late Fusion {model_name}: Acc={fusion_metrics['Accuracy']:.3f}, AUC={fusion_metrics['AUC']:.3f}")
+
+    # ==========================================
+    # PIPELINE: Continuous Patient Audio + LOOCV
+    # ==========================================
+    print("\n" + "="*50)
+    print("PIPELINE: Continuous Patient Audio + LOOCV")
+    print("="*50)
+    
+    feats_continuous = os.path.join(FEATURES_DIR, "features_continuous_audio.xlsx")
+    
+    # H.1 Extract Features from Continuous Audio
+    if os.path.exists(CONTINUOUS_AUDIO_DIR):
+        if not os.path.exists(feats_continuous):
+            print("Extracting features from continuous patient audio...")
+            extract_features(CONTINUOUS_AUDIO_DIR, FEATURES_DIR, "features_continuous_audio.xlsx")
+        else:
+            print(f"Continuous audio features already exist at {feats_continuous}")
+            user_input = input("Do you want to overwrite and re-extract? (y/n): ").strip().lower()
+            if user_input in ['y', 'yes']:
+                print("Re-extracting features...")
+                extract_features(CONTINUOUS_AUDIO_DIR, FEATURES_DIR, "features_continuous_audio.xlsx")
+            else:
+                print("Using existing continuous audio features.")
+        
+        # H.2 Merge Text Features
+        if os.path.exists(feats_continuous) and not text_df.empty:
+            print("Merging Text Features into Continuous Audio Features...")
+            cont_df = pd.read_excel(feats_continuous)
+            
+            if 'filler_ratio' not in cont_df.columns:
+                cont_df['patient_id'] = cont_df['file_name'].astype(str).apply(lambda x: x.split('.')[0])
+                
+                merged_cont_df = pd.merge(cont_df, text_df, left_on='patient_id', right_on='file_name', how='left', suffixes=('', '_txt'))
+                
+                if 'file_name_txt' in merged_cont_df.columns:
+                    merged_cont_df.drop(columns=['file_name_txt'], inplace=True)
+                merged_cont_df.drop(columns=['patient_id'], inplace=True)
+                
+                merged_cont_df.to_excel(feats_continuous, index=False)
+                print(f"Merged continuous audio features saved to {feats_continuous}")
+            else:
+                print("Text features already present in continuous audio data.")
+        
+        # H.3 Train and Evaluate
+        if os.path.exists(feats_continuous):
+            for exp in EXPERIMENTS:
+                current_file = feats_continuous
+                metrics, _ = train_and_evaluate(
+                    current_file, 
+                    RESULTS_DIR, 
+                    scenario_name=f"Continuous_Audio_{exp['name']}",
+                    validation_method="loocv",
+                    use_filter=exp["use_filter"],
+                    use_selection=exp["use_selection"]
+                )
+                all_metrics.extend(metrics)
+    else:
+        print(f"Continuous audio directory not found at {CONTINUOUS_AUDIO_DIR}")
+        print("Skipping Pipeline")
 
     # 4. Consolidate Results
     print("\n========================================")
