@@ -8,7 +8,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from src.feature_extraction import extract_features
 from src.train_model import train_and_evaluate
 from src.preprocess_segments import preprocess_with_pyannote, preprocess_with_transcript, preprocess_continuous_patient_audio
-from src.utils import generate_global_performance_charts
+
 from src.merge_txt_feature import extract_text_features_from_dir
 from src.late_fusion import fuse_predictions
 
@@ -506,9 +506,8 @@ def main():
         print(final_df.to_string(index=False))
         print(f"\nFull report saved to: {output_file}")
         
-        # Sort by Scenario name for better plotting
-        final_df = final_df.sort_values('Scenario')
-        generate_global_performance_charts(final_df, RESULTS_DIR)
+        # Note: Use generate_report_charts.py to create final report charts
+        print(f"\nTo generate report charts, run: python generate_report_charts.py")
     else:
         print("No metrics collected.")
 

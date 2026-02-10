@@ -5,7 +5,7 @@ import time
 from sklearn.model_selection import GroupKFold, LeaveOneOut, LeaveOneGroupOut, cross_val_predict
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
-from src.utils import evaluate_predictions, save_metrics_to_excel, plot_roc_comparison, save_feature_importance
+from src.utils import evaluate_predictions, save_feature_importance
 from src.models import get_models
 from src.preprocess import get_uncorrelated_features
 from src.feature_selection import get_selected_features
@@ -197,11 +197,10 @@ def train_and_evaluate(data_file, output_dir, scenario_name="Baseline", validati
                 prev_was_underscore = True
         safe_scenario = safe_scenario.strip("_") + "_" + validation_method
 
-        # Save Metrics Table
-        save_metrics_to_excel(metrics_list, os.path.join(output_dir, f"results_{safe_scenario}.xlsx"))
 
-        # Save ROC Plot
-        plot_roc_comparison(roc_data_list, os.path.join(output_dir, f"roc_{safe_scenario}.png"))
+        # Note: Intermediate metrics and ROC curves are no longer saved.
+        # All results are consolidated in final_consolidated_report.xlsx by main.py
+
 
     return metrics_list, roc_data_list # Return roc_data_list to access predictions
 
