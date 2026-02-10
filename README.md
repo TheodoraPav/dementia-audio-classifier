@@ -92,12 +92,12 @@ The pipeline supports three methods for processing patient audio:
 ### 2. Feature Extraction
 *   **Audio Features**: Acoustic features using `pyAudioAnalysis` (MFCCs, spectral features, chroma excluded).
 *   **Text Features**: Linguistic markers from transcriptions including:
-    - Filler ratio (`um`, `uh`)
-    - Pause ratio (`&=laugh`, `&=cough`, etc.)
-    - Repetition ratio (`[/]`)
-    - Error ratio (`[*]`)
-    - Correction ratio (`[//]`)
-    - Self-correction ratio (utterances with self-corrections)
+    - Filler ratio
+    - Pause ratio
+    - Repetition ratio
+    - Error ratio
+    - Correction ratio
+    - Self-correction ratio
     - Words per minute (speech rate based on `.cha` timestamps)
 
 ### 3. Multimodal Fusion Strategies
@@ -113,20 +113,10 @@ The pipeline supports three methods for processing patient audio:
 *   **Baseline Comparison**: Evaluates performance with and without filtering.
 
 ### 6. Works Without Raw Data
-If raw data is missing, the pipeline uses pre-computed features from `data/processed/` (tracked in Git).
+If raw data is missing, the pipeline uses pre-computed features from `data/processed/`.
 
 ## Performance Summary
 According to experimental results:
 - **Best F1-Score**: Text-only features (0.747)
 - **Best AUC-ROC**: Late Fusion with SVM Linear (0.794)
 - **Optimal Configuration**: Late Fusion on raw audio with subject-independent validation
-
-See `experimental_results.tex` for detailed analysis and LaTeX-formatted results.
-
-## Roadmap
-*   [x] Feature Selection (Intersection of top features from RF/XGB/SVM)
-*   [x] Advanced Audio Processing (Speaker Diarization)
-*   [x] Model Training & Evaluation
-*   [x] Multi-Pipeline Comparison (Feature combinations and validation methods)
-*   [x] Late Fusion Implementation
-*   [x] Automated Report Chart Generation
