@@ -4,7 +4,6 @@ A comprehensive multimodal machine learning pipeline for early Alzheimer's demen
 
 ## Project Structure
 The project is organized into a modular pipeline:
-*   `src/audio_processing.py`: Implements K-Means clustering for speaker diarization.
 *   `src/preprocess_segments.py`: Handles audio segmentation using Pyannote diarization or transcript-based timestamps.
 *   `src/feature_extraction.py`: Wrapper for `pyAudioAnalysis` to extract acoustic features (MFCCs, spectral features, etc.).
 *   `src/merge_txt_feature.py`: Extracts linguistic features from `.cha` transcription files (disfluencies, speech rate).

@@ -2,7 +2,6 @@ import os
 import sys
 import numpy as np
 import scipy.io.wavfile as wavfile
-from src.audio_processing import process_audio_file
 try:
     from pyannote.audio import Pipeline
 except ImportError:
