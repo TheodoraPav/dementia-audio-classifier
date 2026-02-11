@@ -8,7 +8,7 @@ The project is organized into a modular pipeline:
 *   `src/feature_extraction.py`: Wrapper for `pyAudioAnalysis` to extract acoustic features (MFCCs, spectral features, etc.).
 *   `src/merge_txt_feature.py`: Extracts linguistic features from `.cha` transcription files (disfluencies, speech rate).
 *   `src/preprocess.py`: Utilities for data cleaning, specifically removing highly correlated features.
-*   `src/feature_selection.py`: Identifies features using the intersection of multiple models (RF, XGB, SVM).
+*   `src/feature_selection.py`: Provides dynamic feature selection using intersection of multiple models (RF, XGB, SVM) during training.
 *   `src/models.py`: Repository for model architectures and classifier configurations.
 *   `src/train_model.py`: Module for model training, cross-validation execution, and metric reporting.
 *   `src/utils.py`: Helper functions for calculating performance metrics and feature importance visualization.
